@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 class ContinuousWaveletTransform:
     def __init__(self, fs, signal, wavelet='cmor1.5-1.0', freqNum = 224):
         '''
-        fs: 信号频率
-        fig: 原始信号
-        wavelet: 连续小波种类
-        freqNum: 频率域细分点个数
+        Args:
+            fs(_int_): 信号频率
+            signal(_np.array_): 原始信号
+            wavelet(_str_): 连续小波种类
+            freqNum(_int_): 频率域细分点个数
         '''
         signal = np.squeeze(np.array(signal))
         signal = signal - np.mean(signal) # 去直流分量
