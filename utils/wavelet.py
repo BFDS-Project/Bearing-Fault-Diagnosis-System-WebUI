@@ -18,7 +18,7 @@ class ContinuousWaveletTransform:
         self.time = np.arange(0, len(signal))/fs
 
         self.cwtmatr, self.freqs = pywt.cwt(signal, widths, wavelet, sampling_period=1/fs)
-        self.cwtmatr = np.abs(self.cwtmatr[:-1, :-1]) # cwt结果为复数，要取模
+        self.cwtmatr = np.abs(self.cwtmatr) # cwt结果为复数，要取模
 
     def plot(self, logspace = True):
         fig, axs = plt.subplots(1, 1)
