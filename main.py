@@ -24,9 +24,18 @@ class Argument:
         
         # 训练参数
         self.batch_size     = 64                # 批次大小
-        self.cuda_device    = '0'               # 训练设备
+        self.bottleneck     = True              # 是否使用bottleneck层
+        self.bottleneck_num = 256               # bottleneck层的输出维数
         self.checkpoint_dir = './checkpoint'    # 模型保存路径
+        self.cuda_device    = '0'               # 训练设备
         self.last_batch     = False             # 是否保留最后的不完整批次
+        self.pretrained     = False             # 是否加载预训练模型
+
+        # 迁移学习参数  
+        # 领域对抗
+        self.domain_adversarial = True          # 是否采用领域对抗
+        self.adversarial_loss   = 'CDA'         # TODO: 领域对抗损失函数尚未完成
+         
 
 
 if __name__ == '__main__':
