@@ -39,13 +39,13 @@ class train_utils:
                                               args.normlizetype).data_split(transfer_learning=True)
 
         self.dataloaders = {
-            x:  torch.utils.data.DataLoader(self.datasets[x], 
-                                            batch_size  = args.batch_size,
-                                            shuffle     = (x.split('_')[1] == 'train'),
-                                            num_workers = args.num_workers,
-                                            pin_memory  = (self.device == 'cuda'),
-                                            drop_last   = (args.last_batch and x.split('_')[1] == 'train')
-                                            )
+            x: torch.utils.data.DataLoader(self.datasets[x], 
+                                           batch_size   = args.batch_size,
+                                           shuffle      = (x.split('_')[1] == 'train'),
+                                           num_workers  = args.num_workers,
+                                           pin_memory   = (self.device == 'cuda'),
+                                           drop_last    = (args.last_batch and x.split('_')[1] == 'train')
+                                           )
             for x in ['source_train', 'source_val', 'target_train', 'target_val']
             }
         
@@ -57,16 +57,16 @@ class train_utils:
             # bottleneck层由线性层、ReLU层与Dropout层组成
             # 分类层为bottleneck的最后一层到输出的线性层
             # TODO: 注意Datasets要有分类的类数属性num_classes
-            self.classifier_layer = nn.Sequential(nn.Linear(self.model.output_num(), args.bottleneck_num),
-                                                  nn.ReLU(inplace=True), 
-                                                  nn.Dropout(),
-                                                  nn.Linear(args.bottleneck_num, Dataset.num_classes))
+            self.bottleneck_layer = nn.Sequential(nn.Linear(self.model.output_num(), args.bottleneck_num),
+                                                  nn.ReLU(inplace = True), # mark: 此处为节省内存，采用了inplace操作
+                                                  nn.Dropout()
+                                                  )
+            self.classifier_layer = nn.Linear(args.bottleneck_num, Dataset.num_classes)
+            self.model_all = nn.Sequential(self.model, self.bottleneck_layer, self.classifier_layer)
         else:
             # 若不启用bottleneck层，则仅包含最后一层
             self.classifier_layer = nn.Linear(self.model.output_num(), Dataset.num_classes)
-
-        # 模型实际上为原模型加入bottleneck层与输出层的结构
-        self.model_all = nn.Sequential(self.model, self.classifier_layer)
+            self.model_all = nn.Sequential(self.model, self.classifier_layer)
 
         # 定义领域对抗网络
         if args.domain_adversarial:
@@ -74,12 +74,12 @@ class train_utils:
             self.max_iter = len(self.dataloaders['source_train'])*(args.max_epoch-args.middle_epoch)
 
             # 若对抗损失为CDA或CDA+E，需引入对抗网络
-            # TODO: 对抗网络未完成
             if args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
                 if args.bottleneck:
                     self.AdversarialNet = getattr(models, 'AdversarialNet')(
                                             in_feature              = args.bottleneck_num * Dataset.num_classes,
-                                            hidden_size             = args.hidden_size, max_iter=self.max_iter,
+                                            hidden_size             = args.hidden_size,
+                                            max_iter                = self.max_iter,
                                             trade_off_adversarial   = args.trade_off_adversarial,
                                             lam_adversarial         = args.lam_adversarial
                                             )
