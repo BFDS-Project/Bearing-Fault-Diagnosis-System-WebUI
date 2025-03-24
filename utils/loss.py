@@ -1,5 +1,5 @@
 '''
-此文件存储train.py种迁移学习部分采用的损失函数
+此文件存储train.py中迁移学习部分采用的损失函数
 '''
 import torch
 
@@ -34,7 +34,7 @@ def gaussian_kernel(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None
     bandwidth_list = [bandwidth * (kernel_mul**i) for i in range(kernel_num)]
     
     # 计算多核的高斯核值，带宽即为2σ^2
-    # k(x_i, x_j) = \exp (−\Vert x_i - x_j \Vert ^2 / 2\sigma^2)
+    # k(x_i, x_j) = exp(|x_i - x_j|^2 / 2σ^2)
     kernel_val = [torch.exp(-L2_distance / bandwidth_temp) for bandwidth_temp in bandwidth_list]
     
     return sum(kernel_val)
