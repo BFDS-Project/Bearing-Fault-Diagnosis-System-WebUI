@@ -8,6 +8,7 @@ from torch import optim
 
 import datasets
 import models
+from models.AdversarialNet import calc_coeff, grl_hook, AdversarialNet
 import loss
 
 
@@ -40,7 +41,8 @@ class train_utils:
         self.datasets['target_train'], 
         self.datasets['target_val'] = Dataset(args.data_dir,
                                               args.transfer_task,
-                                              args.normlizetype).data_split(transfer_learning=True)
+                                              args.normlizetype
+                                              ).data_split(transfer_learning=True)
 
         self.dataloaders = {
             x: torch.utils.data.DataLoader(self.datasets[x], 
@@ -80,7 +82,7 @@ class train_utils:
             # 若对抗损失为CDA或CDA+E，对抗网络将输入全部展开
             if args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
                 if args.bottleneck:
-                    self.AdversarialNet = getattr(models, 'AdversarialNet')(
+                    self.AdversarialNet = AdversarialNet(
                                             in_feature              = args.bottleneck_num * Dataset.num_classes,
                                             hidden_size             = args.hidden_size,
                                             max_iter                = self.max_iter,
@@ -88,24 +90,27 @@ class train_utils:
                                             lam_adversarial         = args.lam_adversarial
                                             )
                 else:
-                    self.AdversarialNet = getattr(models, 'AdversarialNet')(
+                    self.AdversarialNet = AdversarialNet(
                                             in_feature              = self.model.output_num()*Dataset.num_classes,
-                                            hidden_size             = args.hidden_size, max_iter=self.max_iter,
+                                            hidden_size             = args.hidden_size, 
+                                            max_iter                = self.max_iter,
                                             trade_off_adversarial   = args.trade_off_adversarial,
                                             lam_adversarial         = args.lam_adversarial
                                             )
             else:
                 if args.bottleneck_num:
-                    self.AdversarialNet = getattr(models, 'AdversarialNet')(
+                    self.AdversarialNet = AdversarialNet(
                                             in_feature              = args.bottleneck_num,
-                                            hidden_size             = args.hidden_size, max_iter=self.max_iter,
+                                            hidden_size             = args.hidden_size,
+                                            max_iter                = self.max_iter,
                                             trade_off_adversarial   = args.trade_off_adversarial,
                                             lam_adversarial         = args.lam_adversarial
                                             )
                 else:
-                    self.AdversarialNet = getattr(models, 'AdversarialNet')(
+                    self.AdversarialNet = AdversarialNet(
                                             in_feature              = self.model.output_num(),
-                                            hidden_size             = args.hidden_size, max_iter=self.max_iter,
+                                            hidden_size             = args.hidden_size,
+                                            max_iter                = self.max_iter,
                                             trade_off_adversarial   = args.trade_off_adversarial,
                                             lam_adversarial         = args.lam_adversarial
                                             )
@@ -135,11 +140,13 @@ class train_utils:
             self.optimizer = optim.SGD(parameter_list, 
                                        lr = args.lr,
                                        momentum = args.momentum,
-                                       weight_decay = args.weight_decay)
+                                       weight_decay = args.weight_decay
+                                       )
         elif args.opt == 'adam':
             self.optimizer = optim.Adam(parameter_list, 
                                         lr = args.lr,
-                                        weight_decay = args.weight_decay)
+                                        weight_decay = args.weight_decay
+                                        )
         else:
             raise Exception("optimizer not implement")
 
@@ -155,7 +162,7 @@ class train_utils:
         else:
             raise Exception("lr schedule not implement")
                 
-        # 定义交叉损失（与对抗网络二选一）
+        # 定义基于映射的损失（与对抗方法二选一）
         if args.distance_metric:
             if args.distance_loss == 'MK-MMD':
                 self.distance_loss = loss.DAN
@@ -171,17 +178,21 @@ class train_utils:
         else:
             self.distance_loss = None
 
-        # 定义对抗损失
+        # 定义基于对抗的损失
         if args.domain_adversarial:
             if args.adversarial_loss == 'DA':
+                # 领域对抗方法采用二元交叉熵损失
                 self.adversarial_loss = nn.BCELoss()
+            
             elif args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
-                # 附加网络
+                # 条件领域对抗方法计算原输出与经过softmax输出后并在一起的损失，需引入附加网络
                 self.softmax_layer_ad = nn.Softmax(dim=1)
                 self.softmax_layer_ad = self.softmax_layer_ad.to(self.device)
                 self.adversarial_loss = nn.BCELoss()
+            
             else:
                 raise Exception("loss not implement")
+            
         else:
             self.adversarial_loss = None
 
@@ -200,8 +211,9 @@ class train_utils:
         step = 0
         step_start = time.time()
         
-        # 记录训练轮次与学习率
+
         for epoch in range(args.max_epoch):
+            # 记录训练轮次与学习率
             logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
             if self.lr_scheduler is not None:
                 logging.info('current lr: {}'.format(self.lr_scheduler.get_lr()))
@@ -269,7 +281,85 @@ class train_utils:
                             logits = outputs
                             loss = self.criterion(logits, labels)
                         else: 
-                            pass
+                            # 若引入了目标域数据训练，要先提取出源域的前向传播结果，再计算源域损失
+                            logits = outputs.narrow(0, 0, labels.size(0))
+                            classifier_loss = self.criterion(logits, labels)
+                            
+                            # 计算基于映射的损失
+                            if self.distance_loss is not None:
+                                if args.distance_loss == 'MK-MMD':
+                                    distance_loss = self.distance_loss(features.narrow(0, 0, labels.size(0)),
+                                                                       features.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))
+                                                                       )
+                                elif args.distance_loss == 'JMMD':
+                                    # JMMD实现多个特征层上的同时对齐，这里采用原输出与经过softmax后输出的两个特征层
+                                    softmax_out = self.softmax_layer(outputs)
+                                    distance_loss = self.distance_loss([features.narrow(0, 0, labels.size(0)),
+                                                                        softmax_out.narrow(0, 0, labels.size(0))],
+                                                                       [features.narrow(0, labels.size(0), inputs.size(0)-labels.size(0)),
+                                                                        softmax_out.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))]
+                                                                       )
+                                elif args.distance_loss == 'CORAL':
+                                    distance_loss = self.distance_loss(outputs.narrow(0, 0, labels.size(0)),
+                                                                       outputs.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))
+                                                                       )
+                                else:
+                                    raise Exception("loss not implement")
+                            else:
+                                distance_loss = 0
+                                
+                            # 计算基于领域对抗的损失
+                            if self.adversarial_loss is not None:
+                                if args.adversarial_loss == 'DA':
+                                    # 领域对抗 (Domain Adversarial) 网络损失
+                                    # 设数据来自源域 -> 标签为0; 来自目标域 -> 标签为1
+                                    domain_label_source = torch.zeros(labels.size(0)).float()
+                                    domain_label_target = torch.ones(inputs.size(0)-labels.size(0)).float()
+                                    
+                                    adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
+                                    adversarial_out = self.AdversarialNet(features)
+                                    adversarial_loss = self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)
+                                    
+                                elif args.adversarial_loss == 'CDA':
+                                    # 条件领域对抗 (Condition DA) 网络损失
+                                    # 分离分类器特征，防止梯度传播到分类器
+                                    softmax_out = self.softmax_layer_ad(outputs).detach()
+                                    op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
+                                    adversarial_out = self.AdversarialNet(op_out.view(-1, softmax_out.size(1) * features.size(1)))
+
+                                    domain_label_source = torch.zeros(labels.size(0)).float()
+                                    domain_label_target = torch.ones(inputs.size(0)-labels.size(0)).float()
+                                    adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
+                                    adversarial_loss = self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)
+                                elif args.adversarial_loss == "CDA+E":
+                                    softmax_out = self.softmax_layer_ad(outputs)
+                                    coeff = calc_coeff(iter_num, self.max_iter)
+                                    entropy = Entropy(softmax_out)
+                                    entropy.register_hook(grl_hook(coeff))
+                                    entropy = 1.0 + torch.exp(-entropy)
+                                    entropy_source = entropy.narrow(0, 0, labels.size(0))
+                                    entropy_target = entropy.narrow(0, labels.size(0), inputs.size(0) - labels.size(0))
+
+                                    softmax_out = softmax_out.detach()
+                                    op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
+                                    adversarial_out = self.AdversarialNet(
+                                        op_out.view(-1, softmax_out.size(1) * features.size(1)))
+                                    domain_label_source = torch.ones(labels.size(0)).float().to(
+                                        self.device)
+                                    domain_label_target = torch.zeros(inputs.size(0) - labels.size(0)).float().to(
+                                        self.device)
+                                    adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(
+                                        self.device)
+                                    weight = torch.cat((entropy_source / torch.sum(entropy_source).detach().item(),
+                                                        entropy_target / torch.sum(entropy_target).detach().item()), dim=0)
+
+                                    adversarial_loss = torch.sum(weight.view(-1, 1) * self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)) / torch.sum(weight).detach().item()
+                                    iter_num += 1
+
+                                else:
+                                    raise Exception("loss not implement")
+                            else:
+                                adversarial_loss = 0
         
         
     
