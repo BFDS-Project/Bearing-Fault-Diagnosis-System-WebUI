@@ -12,29 +12,50 @@ class Argument:
     训练过程中全部超参数
     '''
     def __init__(self):
-        # 模型和数据集参数
+        # 模型和数据集
+        self.bottleneck     = True              # 是否使用bottleneck层
+        self.bottleneck_num = 256               # bottleneck层的输出维数
         self.data_dir       = 'D:/Data/CWRU/'   # 数据集路径
         self.data_name      = 'CWRU'            # 数据集名称
         self.model_name     = 'ResNet12'        # 模型名
         self.normalize_type = 'mean-std'        # 归一化方式
         self.transfer_task  = [0, 1]            # 迁移方向
         
-        # 预处理参数
+        # 预处理
         self.wavelet        = 'cmor1.5-1.0'     # 小波类型
         
-        # 训练参数
+        # 训练
         self.batch_size     = 64                # 批次大小
-        self.bottleneck     = True              # 是否使用bottleneck层
-        self.bottleneck_num = 256               # bottleneck层的输出维数
-        self.checkpoint_dir = './checkpoint'    # 模型保存路径
+        self.checkpoint_dir = './checkpoint'    # 参数保存路径
         self.cuda_device    = '0'               # 训练设备
         self.last_batch     = False             # 是否保留最后的不完整批次
+        self.max_epoch      = 300               # 训练最大轮数
         self.pretrained     = False             # 是否加载预训练模型
+        
+        # 优化器
+        self.momentum       = 0.9               # sgd优化器动量参数
+        self.opt            = 'adam'            # 优化器
+        self.weight_decay   = 1e-5              # 优化器权重衰减
+        
+        # 学习率调度器
+        self.gamma          = 0.1               # 学习率调度器参数
+        self.lr             = 1e-3              # 初始学习率
+        self.lr_scheduler   = 'step'            # 学习率调度器
+        self.steps          = [150, 250]        # 学习率衰减轮次
 
-        # 迁移学习参数  
-        # 领域对抗
-        self.domain_adversarial = True          # 是否采用领域对抗
-        self.adversarial_loss   = 'CDA'         # TODO: 领域对抗损失函数尚未完成
+        # 迁移学习
+        # 基于映射
+        self.distance_loss          = 'JMMD'    # 损失模型
+        self.distance_metric        = False     # 是否采用基于映射的损失
+        
+        # 基于领域对抗
+        self.adversarial_loss       = 'CDA'     # 领域对抗损失
+        self.domain_adversarial     = True      # 是否采用领域对抗
+        self.hidden_size            = 1024      # 对抗网络的隐藏层维数
+        self.lam_adversarial        = 1         # 梯度静态反转时梯度所乘的系数
+        self.middle_epoch           = 100       # 引入对抗的起始轮次
+        self.trade_off_adversarial  = 'Step'    # 梯度反转层权重选择静态or动态更新
+        
          
 
 
