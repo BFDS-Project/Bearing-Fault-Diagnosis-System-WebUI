@@ -50,8 +50,8 @@ class AdversarialNet(nn.Module):
     Args:
         in_feature(_int_): 输入特征维数
         hidden_size(_int_): 隐藏层维数
-        trade_off_adversarial(_float_): 梯度反转层权重选择静态or动态更新
-        lam_adversarial(_float_): 静态反转时梯度所乘的系数
+        grl_option(_float_): 梯度反转层权重选择静态or动态更新
+        grl_lambda(_float_): 静态反转时梯度所乘的系数
         high(_float_): 轮次较大时系数接近high
         low(_float_): 轮次较小时系数接近low
         alpha(_float_): 随轮次增加时系数的衰减参数
@@ -60,8 +60,8 @@ class AdversarialNet(nn.Module):
     def __init__(self, 
                  in_feature: int, 
                  hidden_size: int, 
-                 trade_off_adversarial: str = 'Step', 
-                 lam_adversarial: float = 1.0,
+                 grl_option: str = 'Step', 
+                 grl_lambda: float = 1.0,
                  high: float = 1.0,
                  low: float = 0.0,
                  alpha: float = 10.0,
@@ -85,8 +85,8 @@ class AdversarialNet(nn.Module):
         self.low = low
         self.alpha = alpha
         self.max_iter = max_iter
-        self.trade_off_adversarial = trade_off_adversarial
-        self.lam_adversarial = lam_adversarial
+        self.grl_option = grl_option
+        self.grl_lambda = grl_lambda
         self.iter_num = 0 # 当前迭代轮数
         self.__in_features = 1 # 输出特征维数（伪私有化变量）
 
@@ -96,12 +96,14 @@ class AdversarialNet(nn.Module):
             self.iter_num += 1
             
         # 计算对抗损失权重，可选动态更新还是保持常数
-        if self.trade_off_adversarial == 'Cons':
-            coeff = self.lam_adversarial
-        elif self.trade_off_adversarial == 'Step':
+        if self.grl_option == 'Cons':
+            coeff = self.grl_lambda
+        elif self.grl_option == 'Step':
             coeff = calc_coeff(self.iter_num, self.high, self.low, self.alpha, self.max_iter)
         else:
             raise Exception("loss not implement")
+        
+        # 前向传播
         x = x * 1.0
         x.register_hook(grl_hook(coeff)) # 反转对抗层之前的梯度，以保证最大化领域对抗损失
         x = self.ad_layer1(x)

@@ -1,6 +1,7 @@
 import logging
 import math
 import time
+import os
 import warnings
 
 import torch
@@ -8,8 +9,8 @@ from torch import nn
 from torch import optim
 
 import datasets
-import loss
 import models
+from loss import DAN, JAN, CORAL
 from models.AdversarialNet import *
 
 
@@ -42,8 +43,7 @@ class train_utils:
         self.datasets['target_train'], 
         self.datasets['target_val'] = Dataset(args.data_dir,
                                               args.transfer_task,
-                                              args.normlizetype
-                                              ).data_split(transfer_learning=True)
+                                              args.normalize_type).data_split(transfer_learning=True)
 
         self.dataloaders = {
             x: torch.utils.data.DataLoader(self.datasets[x], 
@@ -51,10 +51,8 @@ class train_utils:
                                            shuffle      = (x.split('_')[1] == 'train'),
                                            num_workers  = args.num_workers,
                                            pin_memory   = (self.device == 'cuda'),
-                                           drop_last    = (args.last_batch and x.split('_')[1] == 'train')
-                                           )
-            for x in ['source_train', 'source_val', 'target_train', 'target_val']
-            }
+                                           drop_last    = (args.last_batch and x.split('_')[1] == 'train'))                                        
+            for x in ['source_train', 'source_val', 'target_train', 'target_val']}          
         
         
         # 定义模型
@@ -66,8 +64,7 @@ class train_utils:
             # TODO: 注意Datasets要有分类的类数属性num_classes
             self.bottleneck_layer = nn.Sequential(nn.Linear(self.model.output_num(), args.bottleneck_num),
                                                   nn.ReLU(inplace = True), # mark: 此处为节省内存，采用了inplace操作
-                                                  nn.Dropout()
-                                                  )
+                                                  nn.Dropout())                                                
             self.classifier_layer = nn.Linear(args.bottleneck_num, Dataset.num_classes)
             self.model_all = nn.Sequential(self.model, self.bottleneck_layer, self.classifier_layer)
         else:
@@ -76,52 +73,43 @@ class train_utils:
             self.model_all = nn.Sequential(self.model, self.classifier_layer)
 
         # 定义领域对抗网络
-        if args.domain_adversarial:
+        if args.adversarial_option:
             # 引入对抗后的最大迭代轮数 = 源域全部数据 * (最大轮数 - 引入对抗的轮数)
-            self.max_iter = len(self.dataloaders['source_train'])*(args.max_epoch-args.middle_epoch)
+            self.max_iter = len(self.dataloaders['source_train']) * (args.max_epoch - args.middle_epoch)
 
             # 若对抗损失为CDA或CDA+E，对抗网络将输入全部展开
             if args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
                 if args.bottleneck:
-                    self.AdversarialNet = AdversarialNet(
-                                            in_feature              = args.bottleneck_num * Dataset.num_classes,
-                                            hidden_size             = args.hidden_size,
-                                            max_iter                = self.max_iter,
-                                            trade_off_adversarial   = args.trade_off_adversarial,
-                                            lam_adversarial         = args.lam_adversarial
-                                            )
+                    self.AdversarialNet = AdversarialNet(in_feature     = args.bottleneck_num * Dataset.num_classes,
+                                                         hidden_size    = args.hidden_size,
+                                                         max_iter       = self.max_iter,
+                                                         grl_option     = args.grl_option,
+                                                         grl_lambda     = args.grl_lambda)                                            
                 else:
-                    self.AdversarialNet = AdversarialNet(
-                                            in_feature              = self.model.output_num()*Dataset.num_classes,
-                                            hidden_size             = args.hidden_size, 
-                                            max_iter                = self.max_iter,
-                                            trade_off_adversarial   = args.trade_off_adversarial,
-                                            lam_adversarial         = args.lam_adversarial
-                                            )
+                    self.AdversarialNet = AdversarialNet(in_feature     = self.model.output_num() * Dataset.num_classes,
+                                                         hidden_size    = args.hidden_size,
+                                                         max_iter       = self.max_iter,
+                                                         grl_option     = args.grl_option,
+                                                         grl_lambda     = args.grl_lambda)                                         
             else:
                 if args.bottleneck_num:
-                    self.AdversarialNet = AdversarialNet(
-                                            in_feature              = args.bottleneck_num,
-                                            hidden_size             = args.hidden_size,
-                                            max_iter                = self.max_iter,
-                                            trade_off_adversarial   = args.trade_off_adversarial,
-                                            lam_adversarial         = args.lam_adversarial
-                                            )
+                    self.AdversarialNet = AdversarialNet(in_feature     = args.bottleneck_num,
+                                                         hidden_size    = args.hidden_size,
+                                                         max_iter       = self.max_iter,
+                                                         grl_option     = args.grl_option,
+                                                         grl_lambda     = args.grl_lambda)                                           
                 else:
-                    self.AdversarialNet = AdversarialNet(
-                                            in_feature              = self.model.output_num(),
-                                            hidden_size             = args.hidden_size,
-                                            max_iter                = self.max_iter,
-                                            trade_off_adversarial   = args.trade_off_adversarial,
-                                            lam_adversarial         = args.lam_adversarial
-                                            )
-
-     
+                    self.AdversarialNet = AdversarialNet(in_feature     = self.model.output_num(),
+                                                         hidden_size    = args.hidden_size,
+                                                         max_iter       = self.max_iter,
+                                                         grl_option     = args.grl_option,
+                                                         grl_lambda     = args.grl_lambda)                                            
+  
         # 加载模型
         self.model.to(self.device)
         if args.bottleneck:
             self.bottleneck_layer.to(self.device)
-        if args.domain_adversarial:
+        if args.adversarial_option:
             self.AdversarialNet.to(self.device)
         self.classifier_layer.to(self.device)
         
@@ -132,7 +120,7 @@ class train_utils:
         if args.bottleneck:
             parameter_list.append({"params": self.bottleneck_layer.parameters(), "lr": args.lr})
         
-        if args.domain_adversaial:
+        if args.adversarial_option:
             parameter_list.append({"params": self.AdversarialNet.parameters(), "lr": args.lr})
 
 
@@ -141,13 +129,11 @@ class train_utils:
             self.optimizer = optim.SGD(parameter_list, 
                                        lr = args.lr,
                                        momentum = args.momentum,
-                                       weight_decay = args.weight_decay
-                                       )
+                                       weight_decay = args.weight_decay)
         elif args.opt == 'adam':
             self.optimizer = optim.Adam(parameter_list, 
                                         lr = args.lr,
-                                        weight_decay = args.weight_decay
-                                        )
+                                        weight_decay = args.weight_decay)
         else:
             raise Exception("optimizer not implement")
 
@@ -164,36 +150,33 @@ class train_utils:
             raise Exception("lr schedule not implement")
                 
         # 定义基于映射的损失（与对抗方法二选一）
-        if args.distance_metric:
+        if args.distance_option:
             if args.distance_loss == 'MK-MMD':
-                self.distance_loss = loss.DAN
+                self.distance_loss = DAN
             elif args.distance_loss == "JMMD":
                 # mark: 附加网络
                 self.softmax_layer = nn.Softmax(dim=1)
                 self.softmax_layer = self.softmax_layer.to(self.device)
-                self.distance_loss = loss.JAN
+                self.distance_loss = JAN
             elif args.distance_loss == "CORAL":
-                self.distance_loss = loss.CORAL
+                self.distance_loss = CORAL
             else:
                 raise Exception("loss not implement")
         else:
             self.distance_loss = None
 
         # 定义基于对抗的损失
-        if args.domain_adversarial:
+        if args.adversarial_option:
             if args.adversarial_loss == 'DA':
                 # 领域对抗方法采用二元交叉熵损失
-                self.adversarial_loss = nn.BCELoss()
-            
+                self.adversarial_loss = nn.BCELoss()           
             elif args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
                 # 条件领域对抗方法计算原输出与经过softmax输出后并在一起的损失，需引入附加网络
                 self.softmax_layer_ad = nn.Softmax(dim=1)
                 self.softmax_layer_ad = self.softmax_layer_ad.to(self.device)
-                self.adversarial_loss = nn.BCELoss()
-            
+                self.adversarial_loss = nn.BCELoss()           
             else:
-                raise Exception("loss not implement")
-            
+                raise Exception("loss not implement")            
         else:
             self.adversarial_loss = None
 
@@ -207,7 +190,7 @@ class train_utils:
         batch_loss = 0.0
         best_acc = 0.0
         
-        step = 0
+        
         step_start = time.time()
         
         # 引入目标域数据训练，初始化计数器
@@ -240,14 +223,14 @@ class train_utils:
                     self.model.train()
                     if args.bottleneck:
                         self.bottleneck_layer.train()
-                    if args.domain_adversarial:
+                    if args.adversarial_option:
                         self.AdversarialNet.train()
                     self.classifier_layer.train()
                 else:
                     self.model.eval()
                     if args.bottleneck:
                         self.bottleneck_layer.eval()
-                    if args.domain_adversarial:
+                    if args.adversarial_option:
                         self.AdversarialNet.eval()
                     self.classifier_layer.eval()
                 
@@ -292,20 +275,17 @@ class train_utils:
                             if self.distance_loss is not None:
                                 if args.distance_loss == 'MK-MMD':
                                     distance_loss = self.distance_loss(features.narrow(0, 0, labels.size(0)),
-                                                                       features.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))
-                                                                       )
+                                                                       features.narrow(0, labels.size(0), inputs.size(0)-labels.size(0)))                                                     
                                 elif args.distance_loss == 'JMMD':
                                     # JMMD实现多个特征层上的同时对齐，这里采用原输出与经过softmax后输出的两个特征层
                                     softmax_out = self.softmax_layer(outputs)
                                     distance_loss = self.distance_loss([features.narrow(0, 0, labels.size(0)),
                                                                         softmax_out.narrow(0, 0, labels.size(0))],
                                                                        [features.narrow(0, labels.size(0), inputs.size(0)-labels.size(0)),
-                                                                        softmax_out.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))]
-                                                                       )
+                                                                        softmax_out.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))])
                                 elif args.distance_loss == 'CORAL':
                                     distance_loss = self.distance_loss(outputs.narrow(0, 0, labels.size(0)),
-                                                                       outputs.narrow(0, labels.size(0), inputs.size(0)-labels.size(0))
-                                                                       )
+                                                                       outputs.narrow(0, labels.size(0), inputs.size(0)-labels.size(0)))
                                 else:
                                     raise Exception("loss not implement")
                             else:
@@ -356,7 +336,7 @@ class train_utils:
                                     entropy_source = entropy.narrow(0, 0, labels.size(0))
                                     entropy_target = entropy.narrow(0, labels.size(0), inputs.size(0) - labels.size(0))
                                     
-                                    # 分类分类器特征，防止对抗训练的梯度影响主分类
+                                    # 分离分类器特征，防止对抗训练的梯度影响主分类
                                     softmax_out = softmax_out.detach()
                                     # op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
                                     op_out = softmax_out.unsqueeze(2) * features.unsqueeze(1)
@@ -380,25 +360,86 @@ class train_utils:
                                 adversarial_loss = 0
                                 
                             # 计算trade_off参数
-                            if args.trade_off_distance == 'Cons':
-                                lam_distance = args.lam_distance
-                            elif args.trade_off_distance == 'Step':
-                                lam_distance = 2 / (1 + math.exp(-10 * ((epoch-args.middle_epoch) /
-                                                                        (args.max_epoch-args.middle_epoch)))) - 1
+                            if args.distance_tradeoff == 'Cons':
+                                distance_lambda = args.distance_lambda
+                            elif args.distance_tradeoff == 'Step':
+                                tmp = -10 * ( (epoch-args.middle_epoch) / (args.max_epoch-args.middle_epoch) )
+                                distance_lambda = 2 / (1 + math.exp(tmp)) - 1
                             else:
                                 raise Exception("trade_off_distance not implement")
 
                             # TODO: 检查此处的tradeoff与对抗网络中梯度反转的参数作用是否相同，也要检查动态生成的参数计算是否正确
-                            if args.trade_off_adversarial == 'Cons':
-                                lam_adversarial = args.lam_adversarial
-                            elif args.trade_off_adversarial == 'Step':
-                                lam_adversarial = 2 / (1 + math.exp(-10 * ((epoch-args.middle_epoch) /
+                            if args.adversarial_tradeoff == 'Cons':
+                                adversarial_lambda = args.lam_adversarial
+                            elif args.adversarial_tradeoff == 'Step':
+                                tmp = -10 * ( (epoch-args.middle_epoch) / (args.max_epoch-args.middle_epoch) )
+                                adversarial_lambda = 2 / (1 + math.exp(-10 * ((epoch-args.middle_epoch) /
                                                                         (args.max_epoch-args.middle_epoch)))) - 1
                             else:
                                 raise Exception("loss not implement")
 
-                            loss = classifier_loss + lam_distance * distance_loss + lam_adversarial * adversarial_loss
-        
+                            loss = classifier_loss + distance_lambda * distance_loss + adversarial_lambda * adversarial_loss
+                        
+                        # 计算每个batch的损失、预测正确个数与长度
+                        pred = logits.argmax(dim=1)
+                        correct = torch.eq(pred, labels).float().sum().item()
+                        loss_temp = loss.item() * labels.size(0)
+                        epoch_loss += loss_temp
+                        epoch_acc += correct
+                        epoch_length += labels.size(0)
+                        
+                        # 计算训练信息
+                        if phase == 'source_train':
+                            # 反向传播
+                            self.optimizer.zero_grad()
+                            loss.backward()
+                            self.optimizer.step()
+                            
+                            # 计算批次损失、准确率与长度
+                            batch_loss += loss_temp
+                            batch_acc += correct
+                            batch_count += labels.size(0)
+                            
+                            # 记录训练信息
+                            if batch_step % args.print_step == 0:
+                                batch_loss = batch_loss / batch_count
+                                batch_acc = batch_acc / batch_count
+                                temp_time = time.time()
+                                train_time = temp_time - step_start
+                                step_start = temp_time
+                                batch_time = train_time / args.print_step if batch_step != 0 else train_time
+                                sample_per_sec = 1.0 * batch_count / train_time
+                                logging.info('Epoch: {} [{}/{}], Train Loss: {:.4f} Train Acc: {:.4f},'
+                                             '{:.1f} examples/sec {:.2f} sec/batch'.format(
+                                    epoch, batch_idx * len(labels), len(self.dataloaders[phase].dataset),
+                                    batch_loss, batch_acc, sample_per_sec, batch_time
+                                ))
+                                batch_acc = 0
+                                batch_loss = 0.0
+                                batch_count = 0
+                            batch_step += 1
+
+                # 记录每个epoch的损失与准确率
+                epoch_loss = epoch_loss / epoch_length
+                epoch_acc = epoch_acc / epoch_length
+                logging.info('Epoch: {} {}-Loss: {:.4f} {}-Acc: {:.4f}, Cost {:.1f} sec'.format(
+                    epoch, phase, epoch_loss, phase, epoch_acc, time.time() - epoch_start
+                ))
+                
+                # 保存模型
+                if phase == 'target_val':
+                    # 保存最优模型参数
+                    # 判据：保存middle_epoch后准确率更优或达到最大轮次的epoch中的参数
+                    model_state_dic = self.model_all.state_dict()
+                    if (epoch_acc > best_acc or epoch == args.max_epoch-1) and (epoch > args.middle_epoch-1):
+                        best_acc = epoch_acc
+                        logging.info("save best model epoch {}, acc {:.4f}".format(epoch, epoch_acc))
+                        torch.save(model_state_dic,
+                                    os.path.join(self.save_dir, '{}-{:.4f}-best_model.pth'.format(epoch, best_acc)))
+
+            # 每个epoch结束后更新学习率
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
         
     
     def plot(self):
