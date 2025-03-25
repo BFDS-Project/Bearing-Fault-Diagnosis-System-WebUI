@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import warnings
 
@@ -7,9 +8,9 @@ from torch import nn
 from torch import optim
 
 import datasets
-import models
-from models.AdversarialNet import calc_coeff, grl_hook, AdversarialNet
 import loss
+import models
+from models.AdversarialNet import *
 
 
 class train_utils:
@@ -206,10 +207,16 @@ class train_utils:
         batch_loss = 0.0
         best_acc = 0.0
         
-        iter_num = 0
-        
         step = 0
         step_start = time.time()
+        
+        # 引入目标域数据训练，初始化计数器
+        step_target = 0
+        iter_target = iter(self.dataloaders['target_train'])
+        len_target_loader = len(self.dataloaders['target_train'])
+        
+        # 熵方法的计数器
+        iter_num_entropy = 0
         
 
         for epoch in range(args.max_epoch):
@@ -219,10 +226,6 @@ class train_utils:
                 logging.info('current lr: {}'.format(self.lr_scheduler.get_lr()))
             else:
                 logging.info('current lr: {}'.format(args.lr))
-            
-            step_target = 0
-            iter_target = iter(self.dataloaders['target_train'])
-            len_target_loader = len(self.dataloaders['target_train'])
             
             # 每轮分为三个阶段：源域训练、源域测试、目标域测试
             for phase in ['source_train', 'source_val', 'target_val']:
@@ -324,42 +327,77 @@ class train_utils:
                                     # 条件领域对抗 (Condition DA) 网络损失
                                     # 分离分类器特征，防止梯度传播到分类器
                                     softmax_out = self.softmax_layer_ad(outputs).detach()
-                                    op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
+                                    
+                                    # 取张量积后展开计算
+                                    # 概率转化为行向量，特征转化为列向量，乘积维数为(batch_size, num_classes, featue_dim)
+                                    # op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
+                                    op_out = softmax_out.unsqueeze(2) * features.unsqueeze(1)
                                     adversarial_out = self.AdversarialNet(op_out.view(-1, softmax_out.size(1) * features.size(1)))
 
                                     domain_label_source = torch.zeros(labels.size(0)).float()
                                     domain_label_target = torch.ones(inputs.size(0)-labels.size(0)).float()
                                     adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
+                                    
                                     adversarial_loss = self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)
                                 elif args.adversarial_loss == "CDA+E":
+                                    # 引入熵方法，对概率重新加权
                                     softmax_out = self.softmax_layer_ad(outputs)
-                                    coeff = calc_coeff(iter_num, self.max_iter)
+                                    
+                                    # 梯度反转层的系数与当前迭代轮次有关
+                                    coeff = calc_coeff(iter_num_entropy, max_iter = self.max_iter)
+                                    iter_num_entropy += 1
                                     entropy = Entropy(softmax_out)
+                                    
+                                    # 在熵中施加梯度反转，以最大化领域分类误差
                                     entropy.register_hook(grl_hook(coeff))
+                                    
+                                    # 计算权重，提取源域和目标域部分
                                     entropy = 1.0 + torch.exp(-entropy)
                                     entropy_source = entropy.narrow(0, 0, labels.size(0))
                                     entropy_target = entropy.narrow(0, labels.size(0), inputs.size(0) - labels.size(0))
-
+                                    
+                                    # 分类分类器特征，防止对抗训练的梯度影响主分类
                                     softmax_out = softmax_out.detach()
-                                    op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
-                                    adversarial_out = self.AdversarialNet(
-                                        op_out.view(-1, softmax_out.size(1) * features.size(1)))
-                                    domain_label_source = torch.ones(labels.size(0)).float().to(
-                                        self.device)
-                                    domain_label_target = torch.zeros(inputs.size(0) - labels.size(0)).float().to(
-                                        self.device)
-                                    adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(
-                                        self.device)
+                                    # op_out = torch.bmm(softmax_out.unsqueeze(2), features.unsqueeze(1))
+                                    op_out = softmax_out.unsqueeze(2) * features.unsqueeze(1)
+                                    adversarial_out = self.AdversarialNet(op_out.view(-1, softmax_out.size(1) * features.size(1))) 
+                                    
+                                    # 标签生成                                   
+                                    domain_label_source = torch.zeros(labels.size(0)).float()                                      
+                                    domain_label_target = torch.ones(inputs.size(0) - labels.size(0)).float()                                       
+                                    adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)                                        
                                     weight = torch.cat((entropy_source / torch.sum(entropy_source).detach().item(),
                                                         entropy_target / torch.sum(entropy_target).detach().item()), dim=0)
-
-                                    adversarial_loss = torch.sum(weight.view(-1, 1) * self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)) / torch.sum(weight).detach().item()
-                                    iter_num += 1
+                                    
+                                    # 展开权重，对损失重新加权
+                                    adversarial_loss = torch.sum(weight.view(-1, 1) * 
+                                                                 self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)) 
+                                    adversarial_loss /= torch.sum(weight).detach().item()
 
                                 else:
                                     raise Exception("loss not implement")
                             else:
                                 adversarial_loss = 0
+                                
+                            # 计算trade_off参数
+                            if args.trade_off_distance == 'Cons':
+                                lam_distance = args.lam_distance
+                            elif args.trade_off_distance == 'Step':
+                                lam_distance = 2 / (1 + math.exp(-10 * ((epoch-args.middle_epoch) /
+                                                                        (args.max_epoch-args.middle_epoch)))) - 1
+                            else:
+                                raise Exception("trade_off_distance not implement")
+
+                            # TODO: 检查此处的tradeoff与对抗网络中梯度反转的参数作用是否相同，也要检查动态生成的参数计算是否正确
+                            if args.trade_off_adversarial == 'Cons':
+                                lam_adversarial = args.lam_adversarial
+                            elif args.trade_off_adversarial == 'Step':
+                                lam_adversarial = 2 / (1 + math.exp(-10 * ((epoch-args.middle_epoch) /
+                                                                        (args.max_epoch-args.middle_epoch)))) - 1
+                            else:
+                                raise Exception("loss not implement")
+
+                            loss = classifier_loss + lam_distance * distance_loss + lam_adversarial * adversarial_loss
         
         
     
