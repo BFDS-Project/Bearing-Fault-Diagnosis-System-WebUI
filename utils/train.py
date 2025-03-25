@@ -3,23 +3,27 @@ import math
 import time
 import os
 import warnings
+from datetime import datetime
 
 import torch
 from torch import nn
 from torch import optim
+import matplotlib.pyplot as plt
 
 import datasets
 import models
-from loss import DAN, JAN, CORAL
 from models.AdversarialNet import *
-
+from .loss import DAN, JAN, CORAL
 
 class train_utils:
     def __init__(self, args):
         self.args = args
+        
     
     def setup(self):
         args = self.args
+        self.save_dir = os.path.join(args.checkpoint_dir, 
+                            args.model_name + '_' + datetime.strftime(datetime.now(), '%m%d-%H%M%S'))
 
         # 判断训练设备
         if torch.cuda.is_available():
@@ -38,10 +42,8 @@ class train_utils:
         # TODO: datasets尚未完成，编写时注意调用格式一致
         Dataset = getattr(datasets, args.data_name)
         self.datasets = {}
-        self.datasets['source_train'], 
-        self.datasets['source_val'], 
-        self.datasets['target_train'], 
-        self.datasets['target_val'] = Dataset(args.data_dir,
+        self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'] = Dataset(
+                                              args.data_dir,
                                               args.transfer_task,
                                               args.normalize_type).data_split(transfer_learning=True)
 
@@ -181,6 +183,15 @@ class train_utils:
             self.adversarial_loss = None
 
         self.criterion = nn.CrossEntropyLoss()
+
+        # 画图记录
+        self.acc = {'source_train': np.array([]),
+                    'source_val': np.array([]),
+                    'target_val': np.array([])}
+        
+        self.loss = {'source_train': np.array([]),
+                    'source_val': np.array([]),
+                    'target_val': np.array([])}
         
     def train(self):
         args = self.args
@@ -190,7 +201,7 @@ class train_utils:
         batch_loss = 0.0
         best_acc = 0.0
         
-        
+        batch_step = 0
         step_start = time.time()
         
         # 引入目标域数据训练，初始化计数器
@@ -204,7 +215,7 @@ class train_utils:
 
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
-            logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
+            logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch-1) + '-'*5)
             if self.lr_scheduler is not None:
                 logging.info('current lr: {}'.format(self.lr_scheduler.get_lr()))
             else:
@@ -244,15 +255,13 @@ class train_utils:
                         source_inputs = inputs
                         target_inputs, _ = next(iter_target) # 无监督学习，目标域数据无标签
                         step_target += 1
+                        # 若目标域训练数据已加载完，重新初始化迭代器
+                        if step_target % len_target_loader == 0:
+                            iter_target = iter(self.dataloaders['target_train'])
                         
                         inputs = torch.cat((source_inputs, target_inputs), dim=0)
                         inputs = inputs.to(self.device)
                         labels = labels.to(self.device)
-                    
-                    # 若目标域训练数据已加载完，重新初始化迭代器
-                    if step_target % len_target_loader == 0:
-                        iter_target = iter(self.dataloaders['target_train'])
-                    
                     
                     # 只有源域训练时需要计算梯度
                     with torch.set_grad_enabled(phase == 'source_train'):
@@ -437,10 +446,34 @@ class train_utils:
                         torch.save(model_state_dic,
                                     os.path.join(self.save_dir, '{}-{:.4f}-best_model.pth'.format(epoch, best_acc)))
 
+                self.acc[phase] = np.append(self.acc[phase], epoch_acc)
+                self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+            
             # 每个epoch结束后更新学习率
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
         
     
     def plot(self):
-        pass
+        args = self.args
+
+        plt.subplot(1,2,1)
+        plt.title('Accuracy')
+        plt.xlabel('epoches')
+        plt.ylabel('accuracy')
+        plt.plot(range(args.max_epoch), self.acc['source_train'], label = 'source_train')
+        plt.plot(range(args.max_epoch), self.acc['source_val'], label = 'source_val')
+        plt.plot(range(args.max_epoch), self.acc['target_val'], label = 'target_val')
+        plt.legend()
+
+        plt.subplot(1,2,2)
+        plt.title('Loss Function: {}'.format(args.distance_loss))
+        plt.xlabel('epoches')
+        plt.ylabel('accuracy')
+        plt.plot(range(args.max_epoch), self.loss['source_train'], label = 'source_train')
+        plt.plot(range(args.max_epoch), self.loss['source_val'], label = 'source_val')
+        plt.plot(range(args.max_epoch), self.loss['target_val'], label = 'target_val')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()

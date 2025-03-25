@@ -18,7 +18,7 @@ def calc_coeff(iter_num: int, high: float, low: float, alpha: float, max_iter: f
     return np.float64(2.0 * (high - low) / (1.0 + np.exp(-alpha * iter_num / max_iter)) - (high - low) + low)
 
 
-def grl_hook(coeff: float) -> function:
+def grl_hook(coeff: float):
     '''
     实现GRL(Gradient Reverse Layer 梯度反转层)
     Args:
