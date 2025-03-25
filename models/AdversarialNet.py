@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 import numpy as np
 
@@ -28,6 +29,20 @@ def grl_hook(coeff: float) -> function:
     def fun1(grad):
         return -coeff * grad.clone()
     return fun1
+
+def Entropy(input_prob: torch.tensor) -> torch.tensor:
+    '''
+    计算输入样本的熵
+    Args:
+        input(_torch.tensor_): 输入概率分布, 形状为 (batch_size, num_classes)
+    Returns:
+        entropy(_torch.tensor_): 输出熵值, 长度为 batch_size
+    '''
+    bs = input_prob.size(0)
+    epsilon = 1e-5
+    entropy = -input_prob * torch.log(input_prob + epsilon)
+    entropy = torch.sum(entropy, dim=1)
+    return entropy
 
 class AdversarialNet(nn.Module):
     '''

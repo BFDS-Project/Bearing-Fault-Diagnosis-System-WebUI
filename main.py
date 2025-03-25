@@ -47,6 +47,8 @@ class Argument:
         # 基于映射
         self.distance_loss          = 'JMMD'    # 损失模型
         self.distance_metric        = False     # 是否采用基于映射的损失
+        self.trade_off_distance     = 'Step'    # 基于映射的损失的trade_off参数 Cons/Step
+        self.lam_distance           = 1         # 若调整模式为Cons，指定其具体值
         
         # 基于领域对抗
         self.adversarial_loss       = 'CDA'     # 领域对抗损失
