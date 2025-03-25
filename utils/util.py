@@ -1,15 +1,12 @@
 import pandas as pd
 import numpy as np
+import torch
+import torch.nn.functional as F
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader, random_split
 from typing import List
 from PIL import Image
-
-DATAPATH = "./make-data/Dataset/written-num/data"
-LABELPATH = "./make-data/Dataset/written-num/label/label.txt"
-SIZE = 224
-BATCH_SIZE = 8
-NUM_WORKERS = 2
+from utils.wavelet import ContinuousWaveletTransform
 
 
 def get_data_set(filepath: str) -> pd.DataFrame:
@@ -19,7 +16,6 @@ def get_data_set(filepath: str) -> pd.DataFrame:
 
 transform = transforms.Compose(
     [
-        transforms.Resize([SIZE, SIZE]),
         transforms.ToTensor(),
         transforms.Grayscale(),
         transforms.Normalize(mean=[0.5], std=[0.5]),
@@ -28,25 +24,32 @@ transform = transforms.Compose(
 
 
 class SignalDataset(Dataset):
-    def __init__(self, data_set: pd.DataFrame):
-        # 最后一列是标签
-        self.datas = data_set.iloc[:, :-1]
-        self.labels = data_set.iloc[:, -1]
+    def __init__(self, data_set: np.ndarray, fs, num_classes,transform=None):
+        """
+        Args:
+            data_set (pd.DataFrame): 数据集，最后一列是标签
+            fs (int): 采样频率
+            num_classes(int): 分类数
+            transform (callable, optional): 图像变换
+        """
+        self.datas = data_set[:, :-1]  # 取出时间序列数据
+        self.labels = data_set[:, -1]  # 取出标签
+        self.fs = fs
+        self.num_classes=num_classes
+        self.transform = transform
 
-    # 返回数据集大小
     def __len__(self):
         return self.datas.shape[0]
 
-    # 打开index对应图片进行预处理后return回处理后的图片和标签
     def __getitem__(self, index):
-        # # 需要将图片大小统一并变成tensor形式
-        Image_data=Image.fromarray(np.array(self.datas.iloc[index,:]).reshape(SIZE,SIZE))
-        data = transform(Image_data)#我查transform作用对象是PIL.Image.Image，所以这里需要先将图片转化为numpy.ndarray，然后再reshape为(SIZE,SIZE)
-        label = self.labels[index]
-        return data, label
+        """从 DataFrame 读取时间序列，进行 CWT 变换，并返回处理后的图像和标签"""
+        signal = self.datas[index]  # 取出 1D 信号
+        cwt_result = ContinuousWaveletTransform(self.fs, signal).cwt_results[0]  # 计算 CWT 结果，取 batch 里第一个
+        image=torch.tensor(cwt_result,dtype=torch.float32)
 
-import torch
-from torch.utils.data import Dataset
+        label = self.labels[index]
+        label_onehot = F.one_hot(torch.tensor(label), num_classes=self.num_classes).float()
+        return image, label_onehot
 
 class MatrixDataset(Dataset):
     """
@@ -81,31 +84,24 @@ class MatrixDataset(Dataset):
         return sample, label
 
 
-def get_data_loader(data_set:Dataset) -> List[DataLoader]:#我想这个函数对多种dataset都适用，所以我改成输入dataset而不是pd.DataFrame
-    """
+def get_data_loader(data_set:Dataset,BATCH_SIZE:int =16,NUM_WORKERS:int =0) -> List[DataLoader]:#我想这个函数对多种dataset都适用，所以我改成输入dataset而不是pd.DataFrame
+    '''
     用于获取数据集的 DataLoader。
+    
     Args:
-        data_set(torchd的Dataset):传入的数据集
-        
+        data_set (_torch的Dataset_): 传入的数据集
     Returns:
-        train_loader(torch.utils.data.DataLoader) 训练集的 DataLoader
-        
-        eval_loader(torch.utils.data.DataLoader)  验证集的 DataLoader
-        
-        test_loader(torch.utils.data.DataLoader)  测试集的 DataLoader
-    """
-    data_trained = data_set
-    lengths = [
-        round(0.6 * len(data_trained)),
-        round(0.2 * len(data_trained)),
-        len(data_trained) - round(0.6 * len(data_trained)) - round(0.2 * len(data_trained)),
-    ]
+        元组 (train_loader, eval_loader): 训练集和评估集的dataloader
+    '''
 
-    train_data, eval_data, test_data = random_split(data_trained, lengths)
+    lengths = [
+        round(0.8 * len(data_set)),
+        len(data_set) - round(0.8 * len(data_set))
+    ]
+    train_data, eval_data= random_split(data_set, lengths)
     train_loader = DataLoader(dataset=train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
     eval_loader = DataLoader(dataset=eval_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-    test_loader = DataLoader(dataset=test_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-    return train_loader, eval_loader, test_loader
+    return train_loader,eval_loader
 
 
 if __name__ == "__main__":
