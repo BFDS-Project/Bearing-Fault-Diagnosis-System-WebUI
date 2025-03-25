@@ -11,7 +11,7 @@ class ContinuousWaveletTransform:
         Args:
             fs (_int_): 采样频率
             signals (_np.array_): 输入信号，形状可以是 (signal_length,) 或 (batch_size, signal_length)
-            save_path (_str_): 如果提供，将保存 CWT 变换后的数据到 .npy 文件
+            save_path (_str_): 如果提供，将保存 CWT 变换后的数据到 .npy 文件，默认为None，为None时不保存
             wavelet (_str_): 连续小波类型（默认 'cmor1.5-1.0'）
             freqNum (_int_): 频率点个数（默认 224）
         '''
