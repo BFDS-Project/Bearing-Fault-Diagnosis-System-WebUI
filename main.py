@@ -13,25 +13,27 @@ class Argument:
     '''
     def __init__(self):
         # 数据集
-        self.data_dir       = 'D:/Data/CWRU/'   # 数据集路径
-        self.data_name      = 'CWRU'            # 数据集名称
+        self.data_dir       = 'E:/Data/CWRU_old/'   # 数据集路径
+        self.data_name      = 'CWRU'                # 数据集名称
         
         # 预处理
         self.normalize_type = 'mean-std'        # 归一化方式
         self.wavelet        = 'cmor1.5-1.0'     # 小波类型
         
         # 模型
-        self.model_name     = 'ResNet12'        # 模型名
+        self.model_name     = 'CNN'             # 模型名
         self.bottleneck     = True              # 是否使用bottleneck层
         self.bottleneck_num = 256               # bottleneck层的输出维数
+        self.pretrained     = False             # 是否使用预训练模型
         
         # 训练
         self.batch_size     = 64                # 批次大小
         self.cuda_device    = '0'               # 训练设备
         self.last_batch     = False             # 是否保留最后的不完整批次
-        self.max_epoch      = 300               # 训练最大轮数
+        self.max_epoch      = 200               # 训练最大轮数
+        self.num_workers    = 0                 # 训练设备数
         self.pretrained     = False             # 是否加载预训练模型
-        self.transfer_task  = [0, 1]            # 迁移方向
+        self.transfer_task  = [[0], [1]]        # 迁移方向
         
         # 数据记录
         self.checkpoint_dir = './checkpoint'    # 参数保存路径
@@ -66,10 +68,6 @@ class Argument:
         self.adversarial_lambda     = 1         # 若调整模式为Cons，指定其具体值
         
         
-        
-         
-
-
 if __name__ == '__main__':
     args = Argument()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_device.strip()
