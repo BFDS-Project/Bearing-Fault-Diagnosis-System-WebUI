@@ -25,9 +25,9 @@ def signal_inference():
 
 
 # 更新参数的函数
-def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_method,distance_loss):
+def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
     # 这里更新参数
-    all_params = update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method,distance_loss)
+    all_params = update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss)
     # 这里进行训练
 
     # 这里返回各种结果
@@ -86,17 +86,21 @@ with gr.Blocks(title="BFDS WebUI") as app:
                     gr.Plot(create_plot)
         with gr.Tab("不使用预训练模型"):
             gr.Markdown("使用从零开始训练的方式，不依赖预训练模型。")
-    update_button.click(
-        transfer_learning,
-        inputs=[
-            batch_size_slider,
-            optimizer_radio,
-            learning_rate_slider,
-            scheduler_radio,
-            transfer_method_radio,
-            distance_loss_radio
-        ],
-        outputs=args_all_params,
-    )
+            update_button.click(
+                transfer_learning,
+                inputs=[batch_size_slider, optimizer_radio, learning_rate_slider, scheduler_radio, transfer_method_radio, distance_loss_radio],
+                outputs=args_all_params,
+            )
+    with gr.Tab("信号推理"):
+        gr.File(label="模型文件", file_count="single", file_types=[".bin"])
+        with gr.Tab("单次推理"):
+            gr.Markdown("在此模块中，您可以上传信号数据进行推理。")
+            gr.File(label="上传信号数据", file_count="single", file_types=["csv"])
+            gr.Button("开始推理")
+        with gr.Tab("批量推理"):
+            gr.Markdown("在此模块中，您可以上传信号数据进行批量推理。")
+            gr.File(label="上传信号数据", file_count="multiple", file_types=["csv"])
+            gr.Button("开始批量推理")
+
 app.queue()
 app.launch()
