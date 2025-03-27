@@ -16,7 +16,7 @@ import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
 from .loss import DAN, JAN, CORAL
 
-
+# FIXME 这里训练需要先让那一边做好然后这边才可以做
 class train_utils:
     def __init__(self, args):
         self.args = args

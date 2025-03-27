@@ -22,35 +22,6 @@ transform = transforms.Compose(
 )
 
 
-class SignalDataset(Dataset):
-    def __init__(self, data_set: np.ndarray, fs, num_classes, transform=None):
-        """
-        Args:
-            data_set (pd.DataFrame): 数据集，最后一列是标签
-            fs (int): 采样频率
-            num_classes(int): 分类数
-            transform (callable, optional): 图像变换
-        """
-        self.datas = data_set[:, :-1]  # 取出时间序列数据
-        self.labels = data_set[:, -1]  # 取出标签
-        self.fs = fs
-        self.num_classes = num_classes
-        self.transform = transform
-
-    def __len__(self):
-        return self.datas.shape[0]
-
-    def __getitem__(self, index):
-        """从 DataFrame 读取时间序列，进行 CWT 变换，并返回处理后的图像和标签"""
-        signal = self.datas[index]  # 取出 1D 信号
-        cwt_result = ContinuousWaveletTransform(self.fs, signal).cwt_results[0]  # 计算 CWT 结果，取 batch 里第一个
-        image = torch.tensor(cwt_result, dtype=torch.float32)
-
-        label = self.labels[index]
-        label_onehot = F.one_hot(torch.tensor(label), num_classes=self.num_classes).float()
-        return image, label_onehot
-
-
 class MatrixDataset(Dataset):
     """
     自定义 PyTorch 数据集类，用于存储 N*x*y 形状的矩阵数据及对应的标签。

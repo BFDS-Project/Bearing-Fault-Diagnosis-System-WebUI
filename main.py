@@ -2,6 +2,9 @@ import gradio as gr
 import matplotlib
 import matplotlib.pyplot as plt
 from utils.args import Argument, update_param
+import pandas as pd
+import torch
+from utils.predict import predict
 
 # 设置 Matplotlib 的后端为非交互式后端
 matplotlib.use("Agg")
@@ -19,11 +22,6 @@ plt.rcParams.update(
 args = Argument()
 
 
-# 下面是信号推理的函数
-def signal_inference():
-    pass
-
-
 # 更新参数的函数
 def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
     # 这里更新参数
@@ -32,6 +30,21 @@ def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_
 
     # 这里返回各种结果
     return all_params
+
+
+# 下面是信号推理的函数
+def signal_inference(model_file, signal_file):
+    if model_file is None or signal_file is None:
+        raise ValueError("请上传模型文件和信号数据！")
+    model_state_dict = torch.load(model_file)
+    if isinstance(signal_file, list):
+        for signal_file_single in signal_file:
+            signal = pd.read_csv(signal_file_single)
+            # FIXME 最后做成(n,1,128)的形式
+    else:
+        signal = pd.read_csv(signal_file)
+    result = predict(model_state_dict, signal)
+    return result
 
 
 # 创建一个绘图函数
@@ -86,21 +99,27 @@ with gr.Blocks(title="BFDS WebUI") as app:
                     gr.Plot(create_plot)
         with gr.Tab("不使用预训练模型"):
             gr.Markdown("使用从零开始训练的方式，不依赖预训练模型。")
-            update_button.click(
-                transfer_learning,
-                inputs=[batch_size_slider, optimizer_radio, learning_rate_slider, scheduler_radio, transfer_method_radio, distance_loss_radio],
-                outputs=args_all_params,
-            )
+
     with gr.Tab("信号推理"):
-        gr.File(label="模型文件", file_count="single", file_types=[".bin"])
+        model_file = gr.File(label="模型文件", file_count="single", file_types=[".bin", ".pth", ".pt"])
         with gr.Tab("单次推理"):
             gr.Markdown("在此模块中，您可以上传信号数据进行推理。")
-            gr.File(label="上传信号数据", file_count="single", file_types=["csv"])
-            gr.Button("开始推理")
+            signal_file_single = gr.File(label="上传信号数据", file_count="single", file_types=[".csv"])
+            signal_inference_single_button = gr.Button("开始推理")
+            signal_inference_single_output = gr.Textbox(label="推理结果", lines=8)
         with gr.Tab("批量推理"):
             gr.Markdown("在此模块中，您可以上传信号数据进行批量推理。")
-            gr.File(label="上传信号数据", file_count="multiple", file_types=["csv"])
-            gr.Button("开始批量推理")
+            signal_file_multiple = gr.File(label="上传信号数据", file_count="multiple", file_types=[".csv"])
+            signal_inference_multiple_button = gr.Button("开始批量推理")
+            signal_inference_multiple_output = gr.Textbox(label="批量推理结果", lines=8)
 
+    # 下面是所有函数绑定
+    update_button.click(
+        transfer_learning,
+        inputs=[batch_size_slider, optimizer_radio, learning_rate_slider, scheduler_radio, transfer_method_radio, distance_loss_radio],
+        outputs=args_all_params,
+    )
+    signal_inference_single_button.click(signal_inference, inputs=[model_file, signal_file_single], outputs=signal_inference_single_output)
+    signal_inference_multiple_button.click(signal_inference, inputs=[model_file, signal_file_multiple], outputs=signal_inference_multiple_output)
 app.queue()
 app.launch()
