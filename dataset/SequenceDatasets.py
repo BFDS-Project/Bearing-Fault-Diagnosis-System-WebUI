@@ -7,7 +7,7 @@ import os
 from PIL import Image
 from torchvision import transforms
 import numpy as np
-from datasets.sequence_aug import *
+from dataset.sequence_aug import *
 
 class dataset(Dataset):
 
