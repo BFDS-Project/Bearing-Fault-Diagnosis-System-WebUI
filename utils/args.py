@@ -84,6 +84,7 @@ def update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer
         args.update_param("distance_option", False)
     args.update_param("distance_loss", distance_loss)
     # 返回所有参数
+    # FIXME __dict__
     all_params = {attr: getattr(args, attr) for attr in dir(args) if not attr.startswith("__") and not callable(getattr(args, attr))}
     return json.dumps(all_params, indent=2)
 
