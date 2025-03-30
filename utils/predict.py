@@ -2,8 +2,7 @@ from models.CNN import cnn_features
 import torch
 import torch.nn as nn
 
-# from huggingface_hub import hf_hub_download
-from utils.args import Argument
+from main import Argument
 
 # FIXME 这里的 Argument 类看是直接导入还是后期需要main传进来
 args = Argument()
