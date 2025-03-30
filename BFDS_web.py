@@ -1,7 +1,7 @@
 import gradio as gr
 import matplotlib
 import matplotlib.pyplot as plt
-from main import Argument, update_param
+from BFDS_train import Argument, update_param
 import pandas as pd
 import torch
 from utils.predict import predict
