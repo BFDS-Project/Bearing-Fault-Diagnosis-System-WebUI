@@ -1,7 +1,7 @@
 import gradio as gr
 import matplotlib
 import matplotlib.pyplot as plt
-from utils.args import Argument, update_param
+from main import Argument, update_param
 import pandas as pd
 import torch
 from utils.predict import predict
