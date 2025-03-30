@@ -1,79 +1,69 @@
 import pandas as pd
-import numpy as np
+from datasets import load_dataset
 import torch
-import torch.nn.functional as F
-from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader, random_split
-from typing import List
-from utils.wavelet import ContinuousWaveletTransform
+from typing import Optional, Literal
 
 
-def get_data_set(filepath: str) -> pd.DataFrame:
-    data_set = pd.read_csv(filepath, header=None)
-    return data_set
+def get_dataset(data_set, subset, split):
+    # TODO 换源
+    ds = load_dataset(data_set, subset)
+    return ds[split].to_pandas()
 
 
-transform = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Grayscale(),
-        transforms.Normalize(mean=[0.5], std=[0.5]),
-    ]
-)
-
-
-class MatrixDataset(Dataset):
-    """
-    自定义 PyTorch 数据集类，用于存储 N*x*y 形状的矩阵数据及对应的标签。
-
-    Args:
-        data (numpy.ndarray | torch.Tensor): 形状为 (N, x, y) 的输入数据。
-        labels (numpy.ndarray | torch.Tensor): 形状为 (N,) 的标签向量。
-        transform (callable, optional): 可选的预处理转换函数，默认 None。
-
-    Returns:
-        dataset: (sample (torch.Tensor), label (torch.Tensor))
-    """
-
-    def __init__(self, data: torch.Tensor, labels: torch.Tensor, transform: transforms.Compose = None):
-        self.data = torch.tensor(data, dtype=torch.float32) if not isinstance(data, torch.Tensor) else data
-        self.labels = torch.tensor(labels, dtype=torch.long) if not isinstance(labels, torch.Tensor) else labels
-        self.transform = transform
+class SignalDataset(Dataset):
+    def __init__(self, data_frame: pd.DataFrame, normalize_type: Optional[Literal["mean-std", "min-max"]] = None):
+        if normalize_type == "mean-std":
+            data_frame = (data_frame - data_frame.mean()) / data_frame.std()
+        elif normalize_type == "min-max":
+            data_frame = (data_frame - data_frame.min()) / (data_frame.max() - data_frame.min())
+        self.data = torch.tensor(data_frame.iloc[:, :-1].values, dtype=torch.float32)
+        self.labels = torch.tensor(data_frame.iloc[:, -1].values, dtype=torch.long)
 
     def __len__(self) -> int:
         return self.data.shape[0]
 
     def __getitem__(self, index: int) -> tuple:
-        sample = self.data[index]
+        sample = self.data[index].unsqueeze(0)
         label = self.labels[index]
-
-        if self.transform:
-            sample = self.transform(sample)
-
         return sample, label
 
 
-def get_data_loader(data_set: Dataset, BATCH_SIZE: int = 16, NUM_WORKERS: int = 0) -> List[DataLoader]:  # 我想这个函数对多种dataset都适用，所以我改成输入dataset而不是pd.DataFrame
-    """
-    用于获取数据集的 DataLoader。
+class SignalDatasetCreator:
+    def __init__(self, data_set, labels, transfer_task):
+        self.data_set = data_set
+        self.labels = labels
+        self.source = transfer_task[0]
+        self.target = transfer_task[1]
 
-    Args:
-        data_set (_torch的Dataset_): 传入的数据集
-    Returns:
-        元组 (train_loader, eval_loader): 训练集和评估集的dataloader
-    """
-
-    lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
-    train_data, eval_data = random_split(data_set, lengths)
-    train_loader = DataLoader(dataset=train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-    eval_loader = DataLoader(dataset=eval_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-    return train_loader, eval_loader
-
-
-if __name__ == "__main__":
-    sample = np.random.rand(20, 28, 28)
-    label = np.random.randint(0, 10, 20)
-    data_set = MatrixDataset(sample, label)
-    train_loader, eval_loader, test_loader = get_data_loader(data_set)
-    for i, (data, label) in enumerate(train_loader):
-        print(data.shape, label.shape)
+    def data_split(self, batch_size, num_workers, device, transfer_learning=True):
+        if transfer_learning:
+            # get source train and val
+            data_frame = get_dataset(self.data_set, self.source[0], self.source[1])
+            data_set = SignalDataset(data_frame)
+            lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
+            train_data, eval_data = random_split(data_set, lengths)
+            source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
+            source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            # get target train and val
+            get_dataset(self.data_set, self.target[0], self.target[1])
+            data_set = SignalDataset(data_frame)
+            lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
+            train_data, eval_data = random_split(data_set, lengths)
+            target_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
+            target_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            return source_train, source_val, target_train, target_val
+        else:
+            # get source train and val
+            data_frame = get_dataset(self.data_set, self.source[0], self.source[1])
+            data_set = SignalDataset(data_frame)
+            lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
+            train_data, eval_data = random_split(data_set, lengths)
+            source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
+            source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            # get target val
+            get_dataset(self.data_set, self.target[0], self.target[1])
+            data_frame = get_dataset(self.data_set, self.target[0, 0], self.target[0, 1])
+            data_set = SignalDataset(data_frame)
+            target_val = DataLoader(dataset=data_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            return source_train, source_val, target_val

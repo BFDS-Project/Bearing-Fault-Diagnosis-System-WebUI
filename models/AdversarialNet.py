@@ -41,7 +41,6 @@ def Entropy(input_prob: torch.tensor) -> torch.tensor:
     Returns:
         entropy(_torch.tensor_): 输出熵值, 长度为 batch_size
     """
-    input_prob.size(0)
     epsilon = 1e-5
     entropy = -input_prob * torch.log(input_prob + epsilon)
     entropy = torch.sum(entropy, dim=1)

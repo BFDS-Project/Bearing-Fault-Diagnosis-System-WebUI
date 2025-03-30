@@ -1,125 +1,100 @@
-import gradio as gr
-import matplotlib
-import matplotlib.pyplot as plt
-from utils.args import Argument, update_param
-import pandas as pd
-import torch
-from utils.predict import predict
+import os
+import logging
+import warnings
+from datetime import datetime
 
-# 设置 Matplotlib 的后端为非交互式后端
-matplotlib.use("Agg")
-plt.rcParams.update(
-    {
-        "mathtext.fontset": "stix",
-        "font.size": 14,
-        "font.serif": "STIXGeneral",
-        "font.family": ["Arial", "Microsoft YaHei"],
-        "axes.unicode_minus": False,
-    }
-)
-
-# 初始化 Argument 实例
-args = Argument()
+from utils.logger import setlogger
+from utils.train import train_utils
+from utils.fetch_conditions import fetch_all_conditions_from_huggingface
 
 
-# 更新参数的函数
-def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
-    # 这里更新参数
-    all_params = update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss)
-    # 这里进行训练
+class Argument:
+    """
+    训练过程中全部超参数
+    """
 
-    # 这里返回各种结果
-    return all_params
+    def __init__(self):
+        # 数据集
+        self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
+        self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
+        self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
+        self.transfer_task = [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]]  # 迁移方向
+
+        # 预处理
+        self.normalize_type = None  # 归一化方式, mean-std/min-max/None
+
+        # 模型
+        self.model_name = "CNN"  # 模型名
+        self.bottleneck = True  # 是否使用bottleneck层
+        self.bottleneck_num = 256  # bottleneck层的输出维数
+        self.pretrained = False  # 是否使用预训练模型
+
+        # 训练
+        self.batch_size = 64  # 批次大小
+        self.cuda_device = "0"  # 训练设备
+        self.last_batch = False  # 是否保留最后的不完整批次
+        self.max_epoch = 2  # 训练最大轮数
+        self.num_workers = 0  # 训练设备数
+        self.pretrained = False  # 是否加载预训练模型
+
+        # 数据记录
+        self.checkpoint_dir = "./checkpoint"  # 参数保存路径
+        self.print_step = 50  # 参数打印间隔
+
+        # 优化器
+        self.opt = "adam"  # 优化器 sgd/adam
+        self.momentum = 0.9  # sgd优化器动量参数
+        self.weight_decay = 1e-5  # 优化器权重衰减
+
+        # 学习率调度器
+        self.lr = 1e-3  # 初始学习率
+        self.lr_scheduler = "step"  # 学习率调度器 step/exp/stepLR/fix
+        self.gamma = 0.1  # 学习率调度器参数
+        self.steps = [150, 250]  # 学习率衰减轮次
+
+        # 迁移学习参数
+        self.middle_epoch = 0  # 引入目标域数据的起始轮次
+
+        # 基于映射
+        self.distance_option = False  # 是否采用基于映射的损失
+        self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
+        self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
+        self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
+
+        # 基于领域对抗
+        self.adversarial_option = False  # 是否采用领域对抗
+        self.adversarial_loss = "CDA"  # 领域对抗损失
+        self.hidden_size = 1024  # 对抗网络的隐藏层维数
+        self.grl_option = "Step"  # 梯度反转层权重选择静态or动态更新
+        self.grl_lambda = 1  # 梯度静态反转时梯度所乘的系数
+        self.adversarial_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
+        self.adversarial_lambda = 1  # 若调整模式为Cons，指定其具体值
+
+        # 输出可视化
+        self.wavelet = "cmor1.5-1.0"  # 小波类型
 
 
-# 下面是信号推理的函数
-def signal_inference(model_file, signal_file):
-    if model_file is None or signal_file is None:
-        raise ValueError("请上传模型文件和信号数据！")
-    model_state_dict = torch.load(model_file)
-    if isinstance(signal_file, list):
-        for signal_file_single in signal_file:
-            signal = pd.read_csv(signal_file_single)
-            # FIXME 最后做成(n,1,128)的形式
-    else:
-        signal = pd.read_csv(signal_file)
-    result = predict(model_state_dict, signal)
-    return result
+if __name__ == "__main__":
+    args = Argument()
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device.strip()
+    warnings.filterwarnings("ignore")
 
+    save_dir = os.path.join(args.checkpoint_dir, args.model_name + "_" + datetime.strftime(datetime.now(), "%m%d-%H%M%S"))
+    setattr(args, "save_dir", save_dir)
 
-# 创建一个绘图函数
-def create_plot():
-    x = [1, 2, 3, 4, 5]
-    y = [1, 4, 9, 16, 25]
-    fig, ax = plt.subplots()
-    ax.plot(x, y, label="y = x^2")
-    ax.set_title("示例折线图")
-    ax.set_xlabel("X 轴")
-    ax.set_ylabel("Y 轴")
-    ax.legend()
-    return fig
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
 
+    # 设定日志
+    setlogger(os.path.join(args.save_dir, "train.log"))
 
-with gr.Blocks(title="BFDS WebUI") as app:
-    with gr.Tab("模型训练"):
-        gr.Markdown("在此模块中，您可以选择不同的迁移学习方法进行模型训练。")
-        with gr.Tab("使用预训练模型"):
-            gr.Markdown("使用预训练模型进行迁移学习，您可以选择以下参数进行配置：")
-            with gr.Row():
-                with gr.Column():
-                    batch_size_slider = gr.Slider(1, 258, label="batch_size", step=1, value=args.batch_size)
-                    optimizer_radio = gr.Radio(
-                        label="选择优化器",
-                        choices=["Adam", "SGD", "RMSprop"],
-                        value=args.opt.capitalize(),
-                    )
-                    learning_rate_slider = gr.Slider(1e-5, 1e-2, label="学习率", step=1e-5, value=args.lr)
-                    scheduler_radio = gr.Radio(
-                        label="学习率调度器",
-                        choices=["step", "exp", "stepLR", "fix"],
-                        value=args.lr_scheduler,
-                    )
-                    transfer_method_radio = gr.Radio(
-                        label="迁移学习方式",
-                        choices=["基于映射", "基于领域对抗"],
-                        value="基于领域对抗" if args.adversarial_option else "基于映射",
-                    )
-                with gr.Column():
-                    distance_loss_radio = gr.Radio(
-                        label="距离损失函数",
-                        choices=["MK-MMD", "JMMD", "CORAL"],
-                        value="MK-MMD",  # 修复默认值为有效选项
-                    )
-            update_button = gr.Button("开始训练")
-            with gr.Row():
-                with gr.Column():
-                    # FIXME 需要弄好看一点
-                    args_all_params = gr.Textbox(label="更新结果", lines=8)
-                with gr.Column():
-                    gr.Plot(create_plot)
-        with gr.Tab("不使用预训练模型"):
-            gr.Markdown("使用从零开始训练的方式，不依赖预训练模型。")
+    # 保存超参数
+    for k, v in args.__dict__.items():
+        if k[-3:] != "dir":
+            logging.info(f"{k}: {v}")
 
-    with gr.Tab("信号推理"):
-        model_file = gr.File(label="模型文件", file_count="single", file_types=[".bin", ".pth", ".pt"])
-        with gr.Tab("单次推理"):
-            gr.Markdown("在此模块中，您可以上传信号数据进行推理。")
-            signal_file_single = gr.File(label="上传信号数据", file_count="single", file_types=[".csv"])
-            signal_inference_single_button = gr.Button("开始推理")
-            signal_inference_single_output = gr.Textbox(label="推理结果", lines=8)
-        with gr.Tab("批量推理"):
-            gr.Markdown("在此模块中，您可以上传信号数据进行批量推理。")
-            signal_file_multiple = gr.File(label="上传信号数据", file_count="multiple", file_types=[".csv"])
-            signal_inference_multiple_button = gr.Button("开始批量推理")
-            signal_inference_multiple_output = gr.Textbox(label="批量推理结果", lines=8)
-
-    # 下面是所有函数绑定
-    update_button.click(
-        transfer_learning,
-        inputs=[batch_size_slider, optimizer_radio, learning_rate_slider, scheduler_radio, transfer_method_radio, distance_loss_radio],
-        outputs=args_all_params,
-    )
-    signal_inference_single_button.click(signal_inference, inputs=[model_file, signal_file_single], outputs=signal_inference_single_output)
-    signal_inference_multiple_button.click(signal_inference, inputs=[model_file, signal_file_multiple], outputs=signal_inference_multiple_output)
-app.queue()
-app.launch()
+    # 训练
+    trainer = train_utils(args)
+    trainer.setup()
+    trainer.train()
+    trainer.plot()
