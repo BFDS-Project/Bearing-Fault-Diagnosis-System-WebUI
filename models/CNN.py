@@ -1,17 +1,14 @@
 import torch
 from torch import nn
-import warnings
 
 
 # ----------------------------inputsize >=28-------------------------------------------------------------------------
 class CNN(nn.Module):
-    def __init__(self, pretrained=False, in_channel=1, out_channel=10):
+    def __init__(self):
         super(CNN, self).__init__()
-        if pretrained == True:
-            warnings.warn("Pretrained model is not available")
-
+        self.__in_features = 256
         self.layer1 = nn.Sequential(
-            nn.Conv1d(in_channel, 16, kernel_size=15),  # 16, 26 ,26
+            nn.Conv1d(1, 16, kernel_size=15),  # 16, 26 ,26
             nn.BatchNorm1d(16),
             nn.ReLU(inplace=True),
         )
@@ -48,25 +45,12 @@ class CNN(nn.Module):
 
         return x
 
-
-# FIXME 看要不要东西
-# convnet without the last layer
-class cnn_features(nn.Module):
-    def __init__(self, pretrained=False):
-        super(cnn_features, self).__init__()
-        self.model_cnn = CNN(pretrained)
-        self.__in_features = 256
-
-    def forward(self, x):
-        x = self.model_cnn(x)
-        return x
-
     def output_num(self):
         return self.__in_features
 
 
 if __name__ == "__main__":
-    model = cnn_features()
+    model = CNN()
     input = torch.randn(1, 1, 224)
     out = model(input)
     print(out.shape)

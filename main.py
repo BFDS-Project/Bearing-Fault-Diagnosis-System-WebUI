@@ -5,6 +5,7 @@ from datetime import datetime
 
 from utils.logger import setlogger
 from utils.train import train_utils
+from utils.fetch_conditions import fetch_all_conditions_from_huggingface
 
 
 class Argument:
@@ -14,18 +15,13 @@ class Argument:
 
     def __init__(self):
         # 数据集
-        self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"
-        # FIXME 看看能不能自动返回完整的就不需要我手写了
-        self.conditions = {
-            "CWRU": {"CWRU_12k_Drive_End_Bearing_Fault_Data", "CWRU_12k_Fan_End_Bearing_Fault_Data"},
-            "qita": {"CWRU_12k_Drive_End_Bearing_Fault_Data", "CWRU_12k_Fan_End_Bearing_Fault_Data"},
-        }  # 所有数据集的subset和split，具体见网页https://huggingface.co/datasets/BFDS-Project/Bearing-Fault-Diagnosis-System
+        self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
+        self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
         self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
         self.transfer_task = [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]]  # 迁移方向
 
         # 预处理
-        self.normalize_type = "mean-std"  # 归一化方式
-        self.wavelet = "cmor1.5-1.0"  # 小波类型
+        self.normalize_type = None  # 归一化方式, mean-std/min-max/None
 
         # 模型
         self.model_name = "CNN"  # 模型名
@@ -58,9 +54,9 @@ class Argument:
 
         # 迁移学习参数
         self.middle_epoch = 0  # 引入目标域数据的起始轮次
-        
+
         # 基于映射
-        self.distance_option = True  # 是否采用基于映射的损失
+        self.distance_option = False  # 是否采用基于映射的损失
         self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
@@ -73,6 +69,9 @@ class Argument:
         self.grl_lambda = 1  # 梯度静态反转时梯度所乘的系数
         self.adversarial_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.adversarial_lambda = 1  # 若调整模式为Cons，指定其具体值
+
+        # 输出可视化
+        self.wavelet = "cmor1.5-1.0"  # 小波类型
 
 
 if __name__ == "__main__":
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     # 保存超参数
     for k, v in args.__dict__.items():
         if k[-3:] != "dir":
-            logging.info("{}: {}".format(k, v))
+            logging.info(f"{k}: {v}")
 
     # 训练
     trainer = train_utils(args)
