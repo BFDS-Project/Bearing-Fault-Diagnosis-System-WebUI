@@ -5,18 +5,18 @@ import os
 import warnings
 from datetime import datetime
 
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
 from torch import optim
 import matplotlib.pyplot as plt
 
-import datasets
 import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
+from dataset.dataset import SignalDatasetCreator
 from .loss import DAN, JAN, CORAL
 
-# FIXME 这里训练需要先让那一边做好然后这边才可以做
+
 class train_utils:
     def __init__(self, args):
         self.args = args
@@ -29,51 +29,41 @@ class train_utils:
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
             self.device_count = torch.cuda.device_count()
-            logging.info("using {} gpus".format(self.device_count))
+            logging.info(f"using {self.device_count} gpus")
             assert args.batch_size % self.device_count == 0, "batch size should be divided by device count"
         else:
             warnings.warn("gpu is not available")
             self.device = torch.device("cpu")
             self.device_count = 1
-            logging.info("using {} cpu".format(self.device_count))
+            logging.info(f"using {self.device_count} cpu")
 
         # 加载数据集
-        # TODO: datasets尚未完成，编写时注意调用格式一致
-        Dataset = getattr(datasets, args.data_name)
+        signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
         self.datasets = {}
-        self.datasets["source_train"], self.datasets["source_val"], self.datasets["target_train"], self.datasets["target_val"] = Dataset(
-            args.data_dir, args.transfer_task, args.normalize_type
-        ).data_split(transfer_learning=True)
-
+        self.datasets["source_train"], self.datasets["source_val"], self.datasets["target_train"], self.datasets["target_val"] = signal_dataset_creator.data_split(
+            args.batch_size, args.num_workers, self.device, transfer_learning=True
+        )
         self.dataloaders = {
-            x: torch.utils.data.DataLoader(
-                self.datasets[x],
-                batch_size=args.batch_size,
-                shuffle=(x.split("_")[1] == "train"),
-                num_workers=args.num_workers,
-                pin_memory=(self.device == "cuda"),
-                drop_last=(args.last_batch and x.split("_")[1] == "train"),
-            )
-            for x in ["source_train", "source_val", "target_train", "target_val"]
+            "source_train": self.datasets["source_train"],
+            "source_val": self.datasets["source_val"],
+            "target_train": self.datasets["target_train"],
+            "target_val": self.datasets["target_val"],
         }
-
         # 定义模型
-        # TODO: models尚未完成，编写时注意考虑预训练模型加载
-        self.model = getattr(models, args.model_name)(pretrained=args.pretrained)
+        self.model = getattr(models, args.model_name)()
         if args.bottleneck:
             # bottleneck层由线性层、ReLU层与Dropout层组成
             # 分类层为bottleneck的最后一层到输出的线性层
-            # TODO: 注意Datasets要有分类的类数属性num_classes
             self.bottleneck_layer = nn.Sequential(
                 nn.Linear(self.model.output_num(), args.bottleneck_num),
                 nn.ReLU(inplace=True),  # mark: 此处为节省内存，采用了inplace操作
                 nn.Dropout(),
             )
-            self.classifier_layer = nn.Linear(args.bottleneck_num, Dataset.num_classes)
+            self.classifier_layer = nn.Linear(args.bottleneck_num, len(args.labels))
             self.model_all = nn.Sequential(self.model, self.bottleneck_layer, self.classifier_layer)
         else:
             # 若不启用bottleneck层，则仅包含最后一层
-            self.classifier_layer = nn.Linear(self.model.output_num(), Dataset.num_classes)
+            self.classifier_layer = nn.Linear(self.model.output_num(), len(args.labels))
             self.model_all = nn.Sequential(self.model, self.classifier_layer)
 
         # 定义领域对抗网络
@@ -85,7 +75,7 @@ class train_utils:
             if args.adversarial_loss == "CDA" or args.adversarial_loss == "CDA+E":
                 if args.bottleneck:
                     self.AdversarialNet = AdversarialNet(
-                        in_feature=args.bottleneck_num * Dataset.num_classes,
+                        in_feature=args.bottleneck_num * len(args.labels),
                         hidden_size=args.hidden_size,
                         max_iter=self.max_iter,
                         grl_option=args.grl_option,
@@ -93,7 +83,7 @@ class train_utils:
                     )
                 else:
                     self.AdversarialNet = AdversarialNet(
-                        in_feature=self.model.output_num() * Dataset.num_classes,
+                        in_feature=self.model.output_num() * len(args.labels),
                         hidden_size=args.hidden_size,
                         max_iter=self.max_iter,
                         grl_option=args.grl_option,
@@ -191,6 +181,7 @@ class train_utils:
         batch_count = 0
         batch_loss = 0.0
         best_acc = 0.0
+        current_sample_count = 0
 
         batch_step = 0
         step_start = time.time()
@@ -205,11 +196,11 @@ class train_utils:
 
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
-            logging.info("-" * 5 + "Epoch {}/{}".format(epoch, args.max_epoch - 1) + "-" * 5)
+            logging.info(f"{'-' * 5}Epoch {epoch}/{args.max_epoch - 1}{'-' * 5}")
             if self.lr_scheduler is not None:
-                logging.info("current lr: {}".format(self.lr_scheduler.get_lr()))
+                logging.info(f"current lr: {self.lr_scheduler.get_lr()}")
             else:
-                logging.info("current lr: {}".format(args.lr))
+                logging.info(f"current lr: {args.lr}")
 
             # 每轮分为三个阶段：源域训练、源域测试、目标域测试
             for phase in ["source_train", "source_val", "target_val"]:
@@ -238,7 +229,7 @@ class train_utils:
                 # 遍历每个batch训练
                 for batch_idx, (inputs, labels) in enumerate(self.dataloaders[phase]):
                     # 只有源域训练轮次大于middle_epoch后才在训练过程中引入目标域数据训练
-                    if phase != "source_train" or epoch <= args.middle_epoch:
+                    if phase != "source_train" or epoch < args.middle_epoch:
                         inputs = inputs.to(self.device)
                         labels = labels.to(self.device)
                     else:
@@ -317,8 +308,7 @@ class train_utils:
                                     domain_label_source = torch.zeros(labels.size(0)).float()
                                     domain_label_target = torch.ones(inputs.size(0) - labels.size(0)).float()
                                     adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
-
-                                    adversarial_loss = self.adversarial_loss(adversarial_out.squeeze(), adversarial_label)
+                                    adversarial_loss = self.adversarial_loss(adversarial_out.view(-1), adversarial_label)
                                 elif args.adversarial_loss == "CDA+E":
                                     # 引入熵方法，对概率重新加权
                                     softmax_out = self.softmax_layer_ad(outputs)
@@ -368,7 +358,6 @@ class train_utils:
                             else:
                                 raise Exception("trade_off_distance not implement")
 
-                            # TODO: 检查此处的tradeoff与对抗网络中梯度反转的参数作用是否相同，也要检查动态生成的参数计算是否正确
                             if args.adversarial_tradeoff == "Cons":
                                 adversarial_lambda = args.lam_adversarial
                             elif args.adversarial_tradeoff == "Step":
@@ -408,10 +397,9 @@ class train_utils:
                                 step_start = temp_time
                                 batch_time = train_time / args.print_step if batch_step != 0 else train_time
                                 sample_per_sec = 1.0 * batch_count / train_time
+                                current_sample_count = batch_idx * args.batch_size + len(labels)
                                 logging.info(
-                                    "Epoch: {} [{}/{}], Train Loss: {:.4f} Train Acc: {:.4f},{:.1f} examples/sec {:.2f} sec/batch".format(
-                                        epoch, batch_idx * len(labels), len(self.dataloaders[phase].dataset), batch_loss, batch_acc, sample_per_sec, batch_time
-                                    )
+                                    f"Epoch: {epoch} [{current_sample_count}/{len(self.dataloaders[phase].dataset)}], Train Loss: {batch_loss:.4f} Train Acc: {batch_acc:.4f},{sample_per_sec:.1f} examples/sec {batch_time:.2f} sec/batch"
                                 )
                                 batch_acc = 0
                                 batch_loss = 0.0
@@ -421,7 +409,7 @@ class train_utils:
                 # 记录每个epoch的损失与准确率
                 epoch_loss = epoch_loss / epoch_length
                 epoch_acc = epoch_acc / epoch_length
-                logging.info("Epoch: {} {}-Loss: {:.4f} {}-Acc: {:.4f}, Cost {:.1f} sec".format(epoch, phase, epoch_loss, phase, epoch_acc, time.time() - epoch_start))
+                logging.info(f"Epoch: {epoch} {phase}-Loss: {epoch_loss:.4f} {phase}-Acc: {epoch_acc:.4f}, Cost {time.time() - epoch_start:.1f} sec")
 
                 # 保存模型
                 if phase == "target_val":
@@ -430,8 +418,8 @@ class train_utils:
                     model_state_dic = self.model_all.state_dict()
                     if (epoch_acc > best_acc or epoch == args.max_epoch - 1) and (epoch > args.middle_epoch - 1):
                         best_acc = epoch_acc
-                        logging.info("save best model epoch {}, acc {:.4f}".format(epoch, epoch_acc))
-                        torch.save(model_state_dic, os.path.join(self.save_dir, "{}-{:.4f}-best_model.pth".format(epoch, best_acc)))
+                        logging.info(f"save best model epoch {epoch}, acc {epoch_acc:.4f}")
+                        torch.save(model_state_dic, os.path.join(self.save_dir, f"{epoch}-{best_acc:.4f}-best_model.bin"))
 
                 self.acc[phase] = np.append(self.acc[phase], epoch_acc)
                 self.loss[phase] = np.append(self.loss[phase], epoch_loss)
@@ -453,7 +441,7 @@ class train_utils:
         plt.legend()
 
         plt.subplot(1, 2, 2)
-        plt.title("Loss Function: {}".format(args.distance_loss))
+        plt.title(f"Loss Function: {args.distance_loss}")
         plt.xlabel("epoches")
         plt.ylabel("accuracy")
         plt.plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
