@@ -1,6 +1,7 @@
 import os
 import logging
 import warnings
+import json
 from datetime import datetime
 
 from utils.logger import setlogger
@@ -72,6 +73,32 @@ class Argument:
 
         # 输出可视化
         self.wavelet = "cmor1.5-1.0"  # 小波类型
+
+    def update_param(self, param_name, param_value):
+        if hasattr(self, param_name):
+            setattr(self, param_name, param_value)
+        else:
+            raise AttributeError(f"Parameter '{param_name}' does not exist.")
+
+
+def update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
+    if transfer_method not in ["基于映射", "基于领域对抗"]:
+        return "错误: 迁移学习方式无效，请选择 '基于映射' 或 '基于领域对抗'。"
+    args.update_param("batch_size", batch_size)
+    args.update_param("opt", optimizer.lower())
+    args.update_param("lr", learning_rate)
+    args.update_param("lr_scheduler", scheduler)
+    if transfer_method == "基于映射":
+        args.update_param("adversarial_option", False)
+        args.update_param("distance_option", True)
+    elif transfer_method == "基于领域对抗":
+        args.update_param("adversarial_option", True)
+        args.update_param("distance_option", False)
+    args.update_param("distance_loss", distance_loss)
+    # 返回所有参数
+    # FIXME __dict__
+    all_params = {attr: getattr(args, attr) for attr in dir(args) if not attr.startswith("__") and not callable(getattr(args, attr))}
+    return json.dumps(all_params, indent=2)
 
 
 if __name__ == "__main__":
