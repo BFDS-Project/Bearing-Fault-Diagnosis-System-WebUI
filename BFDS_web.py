@@ -5,6 +5,13 @@ from BFDS_train import Argument, update_param
 import pandas as pd
 import torch
 from utils.predict import predict
+import os
+import logging
+import warnings
+from datetime import datetime
+
+from utils.logger import setlogger
+from utils.train import train_utils
 
 # 设置 Matplotlib 的后端为非交互式后端
 matplotlib.use("Agg")
@@ -27,7 +34,28 @@ def transfer_learning(batch_size, optimizer, learning_rate, scheduler, transfer_
     # 这里更新参数
     all_params = update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss)
     # 这里进行训练
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device.strip()
+    warnings.filterwarnings("ignore")
 
+    save_dir = os.path.join(args.checkpoint_dir, args.model_name + "_" + datetime.strftime(datetime.now(), "%m%d-%H%M%S"))
+    setattr(args, "save_dir", save_dir)
+
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+
+    # 设定日志
+    setlogger(os.path.join(args.save_dir, "train.log"))
+
+    # 保存超参数
+    for k, v in args.__dict__.items():
+        if k[-3:] != "dir":
+            logging.info(f"{k}: {v}")
+
+    # 训练
+    trainer = train_utils(args)
+    trainer.setup()
+    trainer.train()
+    trainer.plot()
     # 这里返回各种结果
     return all_params
 
