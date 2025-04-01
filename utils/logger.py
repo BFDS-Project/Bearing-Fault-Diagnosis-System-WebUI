@@ -8,6 +8,9 @@ def setlogger(path):
         path(_str_): log文件保存路径
     """
     logger = logging.getLogger()
+    if logger.hasHandlers():  # 检查是否已经有处理器
+        logger.handlers.clear()  # 清除已有的处理器，避免重复输出
+
     logger.setLevel(logging.INFO)
     logFormatter = logging.Formatter("%(asctime)s %(message)s", "%m-%d %H:%M:%S")  # 格式为  月-日 时：分：秒
 

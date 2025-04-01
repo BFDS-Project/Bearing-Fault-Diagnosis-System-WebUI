@@ -6,7 +6,6 @@ from typing import Optional, Literal
 
 
 def get_dataset(data_set, subset, split):
-    # TODO 换源
     ds = load_dataset(data_set, subset)
     return ds[split].to_pandas()
 
