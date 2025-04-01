@@ -3,6 +3,19 @@ import logging
 import warnings
 import json
 from datetime import datetime
+import requests
+
+if __name__ == "__main__":
+    try:
+        # 这里尝试连接hugging face连接不上就换国内镜像源
+        response = requests.get("https://huggingface.co", timeout=5)
+        if response.status_code == 200:
+            print("成功连接到 Hugging Face")
+        else:
+            print(f"连接失败，状态码: {response.status_code}")
+    except requests.exceptions.RequestException:
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
 
 from utils.logger import setlogger
 from utils.train import train_utils
@@ -28,15 +41,12 @@ class Argument:
         self.model_name = "CNN"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
         self.bottleneck_num = 256  # bottleneck层的输出维数
-        self.pretrained = False  # 是否使用预训练模型
 
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.last_batch = False  # 是否保留最后的不完整批次
         self.max_epoch = 2  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
-        self.pretrained = False  # 是否加载预训练模型
 
         # 数据记录
         self.checkpoint_dir = "./checkpoint"  # 参数保存路径
@@ -81,22 +91,16 @@ class Argument:
             raise AttributeError(f"Parameter '{param_name}' does not exist.")
 
 
-def update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
-    if transfer_method not in ["基于映射", "基于领域对抗"]:
-        return "错误: 迁移学习方式无效，请选择 '基于映射' 或 '基于领域对抗'。"
-    args.update_param("batch_size", batch_size)
-    args.update_param("opt", optimizer.lower())
-    args.update_param("lr", learning_rate)
-    args.update_param("lr_scheduler", scheduler)
-    if transfer_method == "基于映射":
-        args.update_param("adversarial_option", False)
-        args.update_param("distance_option", True)
-    elif transfer_method == "基于领域对抗":
-        args.update_param("adversarial_option", True)
-        args.update_param("distance_option", False)
-    args.update_param("distance_loss", distance_loss)
+def update_args_param(args, **kwargs):
+    """
+    使用 **kwargs 动态更新 args 的参数。
+    """
+    for param_name, param_value in kwargs.items():
+        try:
+            args.update_param(param_name, param_value)
+        except AttributeError as e:
+            print(f"警告: {e}")
     # 返回所有参数
-    # FIXME __dict__
     all_params = {attr: getattr(args, attr) for attr in dir(args) if not attr.startswith("__") and not callable(getattr(args, attr))}
     return json.dumps(all_params, indent=2)
 

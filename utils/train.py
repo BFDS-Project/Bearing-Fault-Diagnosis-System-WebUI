@@ -39,16 +39,10 @@ class train_utils:
 
         # 加载数据集
         signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
-        self.datasets = {}
-        self.datasets["source_train"], self.datasets["source_val"], self.datasets["target_train"], self.datasets["target_val"] = signal_dataset_creator.data_split(
+        self.dataloaders = {}
+        self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
             args.batch_size, args.num_workers, self.device, transfer_learning=True
         )
-        self.dataloaders = {
-            "source_train": self.datasets["source_train"],
-            "source_val": self.datasets["source_val"],
-            "target_train": self.datasets["target_train"],
-            "target_val": self.datasets["target_val"],
-        }
         # 定义模型
         self.model = getattr(models, args.model_name)()
         if args.bottleneck:
@@ -451,3 +445,27 @@ class train_utils:
 
         plt.tight_layout()
         plt.show()
+
+    def generate_fig(self):
+        args = self.args
+
+        fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+
+        axs[0].set_title("Accuracy")
+        axs[0].set_xlabel("epoches")
+        axs[0].set_ylabel("accuracy")
+        axs[0].plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
+        axs[0].plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
+        axs[0].plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
+        axs[0].legend()
+
+        axs[1].set_title(f"Loss Function: {args.distance_loss}")
+        axs[1].set_xlabel("epoches")
+        axs[1].set_ylabel("loss")
+        axs[1].plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
+        axs[1].plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
+        axs[1].plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
+        axs[1].legend()
+
+        plt.tight_layout()
+        return fig
