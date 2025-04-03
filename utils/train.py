@@ -18,13 +18,15 @@ from .loss import DAN, JAN, CORAL
 
 
 class train_utils:
-    def __init__(self, args):
+    def __init__(self, args, owned=False, data_path=None):
         self.args = args
+        self.owned = owned
+        self.data_path = data_path
 
     def setup(self):
         args = self.args
         self.save_dir = os.path.join(args.checkpoint_dir, args.model_name + "_" + datetime.strftime(datetime.now(), "%m%d-%H%M%S"))
-
+        
         # 判断训练设备
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -38,11 +40,18 @@ class train_utils:
             logging.info(f"using {self.device_count} cpu")
 
         # 加载数据集
-        signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
-        self.dataloaders = {}
-        self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
-            args.batch_size, args.num_workers, self.device, transfer_learning=True
-        )
+        if self.owned:
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            self.dataloaders = {}
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.owned_data_split(
+                self.data_path, args.batch_size, args.num_workers, self.device
+            )
+        else:
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            self.dataloaders = {}
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
+                args.batch_size, args.num_workers, self.device
+            )
         # 定义模型
         self.model = getattr(models, args.model_name)()
         if args.bottleneck:
@@ -85,9 +94,7 @@ class train_utils:
                     )
             else:
                 if args.bottleneck_num:
-                    self.AdversarialNet = AdversarialNet(
-                        in_feature=args.bottleneck_num, hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda
-                    )
+                    self.AdversarialNet = AdversarialNet(in_feature=args.bottleneck_num, hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda)
                 else:
                     self.AdversarialNet = AdversarialNet(
                         in_feature=self.model.output_num(), hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda
@@ -330,9 +337,7 @@ class train_utils:
                                     domain_label_source = torch.zeros(labels.size(0)).float()
                                     domain_label_target = torch.ones(inputs.size(0) - labels.size(0)).float()
                                     adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
-                                    weight = torch.cat(
-                                        (entropy_source / torch.sum(entropy_source).detach().item(), entropy_target / torch.sum(entropy_target).detach().item()), dim=0
-                                    )
+                                    weight = torch.cat((entropy_source / torch.sum(entropy_source).detach().item(), entropy_target / torch.sum(entropy_target).detach().item()), dim=0)
 
                                     # 展开权重，对损失重新加权
                                     adversarial_loss = torch.sum(weight.view(-1, 1) * self.adversarial_loss(adversarial_out.squeeze(), adversarial_label))
