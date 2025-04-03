@@ -67,13 +67,14 @@ class Argument:
         self.middle_epoch = 0  # 引入目标域数据的起始轮次
 
         # 基于映射
+        # FIXME 基于映射有bug
         self.distance_option = False  # 是否采用基于映射的损失
         self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
 
         # 基于领域对抗
-        self.adversarial_option = False  # 是否采用领域对抗
+        self.adversarial_option = True  # 是否采用领域对抗
         self.adversarial_loss = "CDA"  # 领域对抗损失
         self.hidden_size = 1024  # 对抗网络的隐藏层维数
         self.grl_option = "Step"  # 梯度反转层权重选择静态or动态更新
@@ -84,25 +85,56 @@ class Argument:
         # 输出可视化
         self.wavelet = "cmor1.5-1.0"  # 小波类型
 
-    def update_param(self, param_name, param_value):
-        if hasattr(self, param_name):
-            setattr(self, param_name, param_value)
-        else:
-            raise AttributeError(f"Parameter '{param_name}' does not exist.")
+    def update_params(self, **kwargs):
+        """
+        使用 **kwargs 动态更新 args 的参数。
+        """
+        for param_name, param_value in kwargs.items():
+            if hasattr(self, param_name):
+                setattr(self, param_name, param_value)
+            else:
+                print(f"警告: Parameter '{param_name}' does not exist.")
 
-
-def update_args_param(args, **kwargs):
-    """
-    使用 **kwargs 动态更新 args 的参数。
-    """
-    for param_name, param_value in kwargs.items():
-        try:
-            args.update_param(param_name, param_value)
-        except AttributeError as e:
-            print(f"警告: {e}")
-    # 返回所有参数
-    all_params = {attr: getattr(args, attr) for attr in dir(args) if not attr.startswith("__") and not callable(getattr(args, attr))}
-    return json.dumps(all_params, indent=2)
+    def set_recommended_params(self):
+        # TODO cyq来写一个
+        # 给用户设定的推荐参数
+        recommended_params = {
+            "data_set": "BFDS-Project/Bearing-Fault-Diagnosis-System",
+            "conditions": fetch_all_conditions_from_huggingface("BFDS-Project/Bearing-Fault-Diagnosis-System"),
+            "labels": {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5},
+            "transfer_task": [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]],
+            "normalize_type": None,
+            "model_name": "CNN",
+            "bottleneck": True,
+            "bottleneck_num": 256,
+            "batch_size": 64,
+            "cuda_device": "0",
+            "max_epoch": 2,
+            "num_workers": 0,
+            "checkpoint_dir": "./checkpoint",
+            "print_step": 50,
+            "opt": "adam",
+            "momentum": 0.9,
+            "weight_decay": 1e-5,
+            "lr": 1e-3,
+            "lr_scheduler": "step",
+            "gamma": 0.1,
+            "steps": [150, 250],
+            "middle_epoch": 0,
+            "distance_option": True,
+            "distance_loss": "JMMD",
+            "distance_tradeoff": "Step",
+            "distance_lambda": 1,
+            "adversarial_option": False,
+            "adversarial_loss": "CDA",
+            "hidden_size": 1024,
+            "grl_option": "Step",
+            "grl_lambda": 1,
+            "adversarial_tradeoff": "Step",
+            "adversarial_lambda": 1,
+            "wavelet": "cmor1.5-1.0",
+        }
+        self.update_params(**recommended_params)
 
 
 if __name__ == "__main__":
