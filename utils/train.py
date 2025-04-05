@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
 from dataset.dataset import SignalDatasetCreator
-from .loss import DAN, JAN, CORAL
+from utils.loss import DAN, JAN, CORAL
 
 
 class train_utils:
@@ -26,7 +26,7 @@ class train_utils:
     def setup(self):
         args = self.args
         self.save_dir = os.path.join(args.checkpoint_dir, args.model_name + "_" + datetime.strftime(datetime.now(), "%m%d-%H%M%S"))
-        
+
         # 判断训练设备
         if torch.cuda.is_available():
             self.device = torch.device("cuda")

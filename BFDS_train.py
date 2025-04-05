@@ -67,14 +67,13 @@ class Argument:
         self.middle_epoch = 0  # 引入目标域数据的起始轮次
 
         # 基于映射
-        # FIXME 基于映射有bug
-        self.distance_option = False  # 是否采用基于映射的损失
-        self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
+        self.distance_option = True  # 是否采用基于映射的损失
+        self.distance_loss = "MK-MMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
 
         # 基于领域对抗
-        self.adversarial_option = True  # 是否采用领域对抗
+        self.adversarial_option = False  # 是否采用领域对抗
         self.adversarial_loss = "CDA"  # 领域对抗损失
         self.hidden_size = 1024  # 对抗网络的隐藏层维数
         self.grl_option = "Step"  # 梯度反转层权重选择静态or动态更新
@@ -96,7 +95,6 @@ class Argument:
                 print(f"警告: Parameter '{param_name}' does not exist.")
 
     def set_recommended_params(self):
-        # TODO cyq来写一个
         # 给用户设定的推荐参数
         recommended_params = {
             "data_set": "BFDS-Project/Bearing-Fault-Diagnosis-System",
