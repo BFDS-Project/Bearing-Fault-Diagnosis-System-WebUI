@@ -56,36 +56,35 @@ class SignalDatasetCreator:
     def data_split(self, batch_size, num_workers, device):
         # 这里源域和目标域都是我们提供用来验证迁移学习的正确性
         # get source train and val
-        data_frame = get_dataset(self.data_set, self.source[0], self.source[1])
-        data_set = SignalDataset(data_frame)
-        lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
-        train_data, eval_data = random_split(data_set, lengths)
-        source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-        source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+        data_frame_source = get_dataset(self.data_set, self.source[0], self.source[1])
+        data_set_source = SignalDataset(data_frame_source)
+        lengths_source = [round(0.8 * len(data_set_source)), len(data_set_source) - round(0.8 * len(data_set_source))]
+        train_data_source, eval_data_source = random_split(data_set_source, lengths_source)
+        source_train = DataLoader(dataset=train_data_source, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
+        source_val = DataLoader(dataset=eval_data_source, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
         # get target train and val
-        data_frame = get_dataset(self.data_set, self.target[0], self.target[1])
-        data_set = SignalDataset(data_frame)
-        lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
-        train_data, eval_data = random_split(data_set, lengths)
-        target_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-        target_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+        data_frame_target = get_dataset(self.data_set, self.target[0], self.target[1])
+        data_set_target = SignalDataset(data_frame_target)
+        lengths_target = [round(0.8 * len(data_set_target)), len(data_set_target) - round(0.8 * len(data_set_target))]
+        train_data_target, eval_data_target = random_split(data_set_target, lengths_target)
+        target_train = DataLoader(dataset=train_data_target, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
+        target_val = DataLoader(dataset=eval_data_target, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
         return source_train, source_val, target_train, target_val
 
     def owned_data_split(self, data_path, batch_size, num_workers, device):
-        # FIXME 这里不给标签影响acc吗？
         # 这里目标域是用户自己提供的数据集
         # get source train and val
-        data_frame = get_dataset(self.data_set, self.source[0], self.source[1])
-        data_set = SignalDataset(data_frame)
-        lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
-        train_data, eval_data = random_split(data_set, lengths)
-        source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-        source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+        data_frame_source = get_dataset(self.data_set, self.source[0], self.source[1])
+        data_set_source = SignalDataset(data_frame_source)
+        lengths_source = [round(0.8 * len(data_set_source)), len(data_set_source) - round(0.8 * len(data_set_source))]
+        train_data_source, eval_data_source = random_split(data_set_source, lengths_source)
+        source_train = DataLoader(dataset=train_data_source, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
+        source_val = DataLoader(dataset=eval_data_source, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
         # get target train and val
-        data_frame = get_owned_dataset(data_path)
-        data_set = SignalDataset(data_frame)
-        lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
-        train_data, eval_data = random_split(data_set, lengths)
-        target_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-        target_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+        data_frame_target = get_owned_dataset(data_path)
+        data_set_target = SignalDataset(data_frame_target)
+        lengths_target = [round(0.8 * len(data_set_target)), len(data_set_target) - round(0.8 * len(data_set_target))]
+        train_data_target, eval_data_target = random_split(data_set_target, lengths_target)
+        target_train = DataLoader(dataset=train_data_target, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
+        target_val = DataLoader(dataset=eval_data_target, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"), drop_last=True)
         return source_train, source_val, target_train, target_val

@@ -6,7 +6,6 @@ from pathlib import Path
 import models
 
 
-# TODO 处理更多文件
 def audio_to_signal(audio_file, sr=None):
     signal, _ = librosa.load(audio_file, sr=sr)
     return signal
@@ -36,7 +35,6 @@ def predict(model_state_dict, signal_file, args):
         file_extension = Path(signal_file).suffix
         if file_extension == ".csv":
             signal = csv_to_signal(signal_file).reshape(-1, 1, 224)
-        # FIXME 这里能搞多少后缀就多少后缀
         elif file_extension in [".wav", ".mp3"]:
             signal = audio_to_signal(signal_file).reshape(-1, 1, 224)
         else:
@@ -44,5 +42,4 @@ def predict(model_state_dict, signal_file, args):
         signal = torch.tensor(signal, dtype=torch.float32).to(device)
         output = model_all(signal)
         predictions = output.mean(dim=0)
-        # FIXME 这里没有过softmax
     return predictions
