@@ -33,7 +33,7 @@ class CNN(nn.Module):
             nn.AdaptiveMaxPool1d(4),
         )  # 128, 4,4
 
-        self.layer5 = nn.Sequential(nn.Linear(128 * 4, 256), nn.ReLU(inplace=True), nn.Dropout())
+        self.layer5 = nn.Sequential(nn.Linear(128 * 4,self.__in_features), nn.ReLU(inplace=True), nn.Dropout())
 
     def forward(self, x):
         x = self.layer1(x)

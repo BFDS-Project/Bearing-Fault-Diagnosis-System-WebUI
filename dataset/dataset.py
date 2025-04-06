@@ -43,15 +43,15 @@ class SignalDatasetCreator:
             data_set = SignalDataset(data_frame)
             lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
             train_data, eval_data = random_split(data_set, lengths)
-            source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-            source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            source_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"),drop_last=True)
+            source_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"),drop_last=True)
             # get target train and val
-            get_dataset(self.data_set, self.target[0], self.target[1])
+            data_frame=get_dataset(self.data_set, self.target[0], self.target[1])
             data_set = SignalDataset(data_frame)
             lengths = [round(0.8 * len(data_set)), len(data_set) - round(0.8 * len(data_set))]
             train_data, eval_data = random_split(data_set, lengths)
-            target_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"))
-            target_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"))
+            target_train = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device == "cuda"),drop_last=True)
+            target_val = DataLoader(dataset=eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device == "cuda"),drop_last=True)
             return source_train, source_val, target_train, target_val
         else:
             # get source train and val

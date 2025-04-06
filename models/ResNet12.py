@@ -42,8 +42,9 @@ class Block(nn.Module):
 
 
 class ResNet12(nn.Module):
-    def __init__(self, num_classes=5):
+    def __init__(self):
         super(ResNet12, self).__init__()
+        self.__in_features = 256
         self.in_planes = 64  # 初始通道数
 
         # 初始卷积层
@@ -59,7 +60,7 @@ class ResNet12(nn.Module):
 
         # 分类层
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512, num_classes)
+        self.fc = nn.Linear(512, self.__in_features)  # 输出特征维度为256
 
     def _make_layer(self, planes, stride):
         # 每个残差块层包含一个Block
@@ -82,6 +83,10 @@ class ResNet12(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
+    
+    
+    def output_num(self):
+        return self.__in_features
 
 
 # 测试代码

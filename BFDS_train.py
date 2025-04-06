@@ -25,7 +25,7 @@ class Argument:
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
 
         # 模型
-        self.model_name = "CNN"  # 模型名
+        self.model_name = "ResNet_1d"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
         self.bottleneck_num = 256  # bottleneck层的输出维数
         self.pretrained = False  # 是否使用预训练模型
@@ -34,7 +34,7 @@ class Argument:
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
         self.last_batch = False  # 是否保留最后的不完整批次
-        self.max_epoch = 2  # 训练最大轮数
+        self.max_epoch = 10  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
         self.pretrained = False  # 是否加载预训练模型
 
@@ -54,10 +54,10 @@ class Argument:
         self.steps = [150, 250]  # 学习率衰减轮次
 
         # 迁移学习参数
-        self.middle_epoch = 0  # 引入目标域数据的起始轮次
+        self.middle_epoch = 5  # 引入目标域数据的起始轮次
 
         # 基于映射
-        self.distance_option = False  # 是否采用基于映射的损失
+        self.distance_option = True  # 是否采用基于映射的损失
         self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
