@@ -403,4 +403,4 @@ with gr.Blocks(title="BFDS WebUI") as app:
     signal_inference_button.click(signal_inference, inputs=[model_file, signal_file_multiple], outputs=signal_inference_output)
 
 app.queue()
-app.launch()
+app.launch(favicon_path="docs/favicon.ico", show_error=True)

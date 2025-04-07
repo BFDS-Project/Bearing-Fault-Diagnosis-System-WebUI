@@ -1,7 +1,6 @@
 import os
 import logging
 import warnings
-import json
 from datetime import datetime
 import requests
 
@@ -38,7 +37,7 @@ class Argument:
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
 
         # 模型
-        self.model_name = "ResNet_1d"  # 模型名
+        self.model_name = "ResNet"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
         self.bottleneck_num = 256  # bottleneck层的输出维数
 
