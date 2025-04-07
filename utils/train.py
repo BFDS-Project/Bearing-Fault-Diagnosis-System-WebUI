@@ -14,12 +14,14 @@ import matplotlib.pyplot as plt
 import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
 from dataset.dataset import SignalDatasetCreator
-from .loss import DAN, JAN, CORAL
+from utils.loss import DAN, JAN, CORAL
 
 
 class train_utils:
-    def __init__(self, args):
+    def __init__(self, args, owned=False, data_path=None):
         self.args = args
+        self.owned = owned
+        self.data_path = data_path
 
     def setup(self):
         args = self.args
@@ -38,17 +40,18 @@ class train_utils:
             logging.info(f"using {self.device_count} cpu")
 
         # 加载数据集
-        signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
-        self.datasets = {}
-        self.datasets["source_train"], self.datasets["source_val"], self.datasets["target_train"], self.datasets["target_val"] = signal_dataset_creator.data_split(
-            args.batch_size, args.num_workers, self.device, transfer_learning=True
-        )
-        self.dataloaders = {
-            "source_train": self.datasets["source_train"],
-            "source_val": self.datasets["source_val"],
-            "target_train": self.datasets["target_train"],
-            "target_val": self.datasets["target_val"],
-        }
+        if self.owned:
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            self.dataloaders = {}
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.owned_data_split(
+                self.data_path, args.batch_size, args.num_workers, self.device
+            )
+        else:
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            self.dataloaders = {}
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
+                args.batch_size, args.num_workers, self.device
+            )
         # 定义模型
         self.model = getattr(models, args.model_name)()
         if args.bottleneck:
@@ -91,9 +94,7 @@ class train_utils:
                     )
             else:
                 if args.bottleneck_num:
-                    self.AdversarialNet = AdversarialNet(
-                        in_feature=args.bottleneck_num, hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda
-                    )
+                    self.AdversarialNet = AdversarialNet(in_feature=args.bottleneck_num, hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda)
                 else:
                     self.AdversarialNet = AdversarialNet(
                         in_feature=self.model.output_num(), hidden_size=args.hidden_size, max_iter=self.max_iter, grl_option=args.grl_option, grl_lambda=args.grl_lambda
@@ -336,9 +337,7 @@ class train_utils:
                                     domain_label_source = torch.zeros(labels.size(0)).float()
                                     domain_label_target = torch.ones(inputs.size(0) - labels.size(0)).float()
                                     adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
-                                    weight = torch.cat(
-                                        (entropy_source / torch.sum(entropy_source).detach().item(), entropy_target / torch.sum(entropy_target).detach().item()), dim=0
-                                    )
+                                    weight = torch.cat((entropy_source / torch.sum(entropy_source).detach().item(), entropy_target / torch.sum(entropy_target).detach().item()), dim=0)
 
                                     # 展开权重，对损失重新加权
                                     adversarial_loss = torch.sum(weight.view(-1, 1) * self.adversarial_loss(adversarial_out.squeeze(), adversarial_label))
@@ -451,3 +450,27 @@ class train_utils:
 
         plt.tight_layout()
         plt.show()
+
+    def generate_fig(self):
+        args = self.args
+
+        fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+
+        axs[0].set_title("Accuracy")
+        axs[0].set_xlabel("epoches")
+        axs[0].set_ylabel("accuracy")
+        axs[0].plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
+        axs[0].plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
+        axs[0].plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
+        axs[0].legend()
+
+        axs[1].set_title(f"Loss Function: {args.distance_loss}")
+        axs[1].set_xlabel("epoches")
+        axs[1].set_ylabel("loss")
+        axs[1].plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
+        axs[1].plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
+        axs[1].plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
+        axs[1].legend()
+
+        plt.tight_layout()
+        return fig

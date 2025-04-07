@@ -3,6 +3,19 @@ import logging
 import warnings
 import json
 from datetime import datetime
+import requests
+
+if __name__ == "__main__":
+    try:
+        # 这里尝试连接hugging face连接不上就换国内镜像源
+        response = requests.get("https://huggingface.co", timeout=5)
+        if response.status_code == 200:
+            print("成功连接到 Hugging Face")
+        else:
+            print(f"连接失败，状态码: {response.status_code}")
+    except requests.exceptions.RequestException:
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
 
 from utils.logger import setlogger
 from utils.train import train_utils
@@ -28,15 +41,12 @@ class Argument:
         self.model_name = "ResNet_1d"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
         self.bottleneck_num = 256  # bottleneck层的输出维数
-        self.pretrained = False  # 是否使用预训练模型
 
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.last_batch = False  # 是否保留最后的不完整批次
-        self.max_epoch = 10  # 训练最大轮数
+        self.max_epoch = 2  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
-        self.pretrained = False  # 是否加载预训练模型
 
         # 数据记录
         self.checkpoint_dir = "./checkpoint"  # 参数保存路径
@@ -58,7 +68,7 @@ class Argument:
 
         # 基于映射
         self.distance_option = True  # 是否采用基于映射的损失
-        self.distance_loss = "JMMD"  # 损失模型 MK-MMD/JMMD/CORAL
+        self.distance_loss = "MK-MMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
 
@@ -74,31 +84,55 @@ class Argument:
         # 输出可视化
         self.wavelet = "cmor1.5-1.0"  # 小波类型
 
-    def update_param(self, param_name, param_value):
-        if hasattr(self, param_name):
-            setattr(self, param_name, param_value)
-        else:
-            raise AttributeError(f"Parameter '{param_name}' does not exist.")
+    def update_params(self, **kwargs):
+        """
+        使用 **kwargs 动态更新 args 的参数。
+        """
+        for param_name, param_value in kwargs.items():
+            if hasattr(self, param_name):
+                setattr(self, param_name, param_value)
+            else:
+                print(f"警告: Parameter '{param_name}' does not exist.")
 
-
-def update_param(args, batch_size, optimizer, learning_rate, scheduler, transfer_method, distance_loss):
-    if transfer_method not in ["基于映射", "基于领域对抗"]:
-        return "错误: 迁移学习方式无效，请选择 '基于映射' 或 '基于领域对抗'。"
-    args.update_param("batch_size", batch_size)
-    args.update_param("opt", optimizer.lower())
-    args.update_param("lr", learning_rate)
-    args.update_param("lr_scheduler", scheduler)
-    if transfer_method == "基于映射":
-        args.update_param("adversarial_option", False)
-        args.update_param("distance_option", True)
-    elif transfer_method == "基于领域对抗":
-        args.update_param("adversarial_option", True)
-        args.update_param("distance_option", False)
-    args.update_param("distance_loss", distance_loss)
-    # 返回所有参数
-    # FIXME __dict__
-    all_params = {attr: getattr(args, attr) for attr in dir(args) if not attr.startswith("__") and not callable(getattr(args, attr))}
-    return json.dumps(all_params, indent=2)
+    def set_recommended_params(self):
+        # 给用户设定的推荐参数
+        recommended_params = {
+            "data_set": "BFDS-Project/Bearing-Fault-Diagnosis-System",
+            "conditions": fetch_all_conditions_from_huggingface("BFDS-Project/Bearing-Fault-Diagnosis-System"),
+            "labels": {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5},
+            "transfer_task": [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]],
+            "normalize_type": None,
+            "model_name": "CNN",
+            "bottleneck": True,
+            "bottleneck_num": 256,
+            "batch_size": 64,
+            "cuda_device": "0",
+            "max_epoch": 2,
+            "num_workers": 0,
+            "checkpoint_dir": "./checkpoint",
+            "print_step": 50,
+            "opt": "adam",
+            "momentum": 0.9,
+            "weight_decay": 1e-5,
+            "lr": 1e-3,
+            "lr_scheduler": "step",
+            "gamma": 0.1,
+            "steps": [150, 250],
+            "middle_epoch": 0,
+            "distance_option": True,
+            "distance_loss": "JMMD",
+            "distance_tradeoff": "Step",
+            "distance_lambda": 1,
+            "adversarial_option": False,
+            "adversarial_loss": "CDA",
+            "hidden_size": 1024,
+            "grl_option": "Step",
+            "grl_lambda": 1,
+            "adversarial_tradeoff": "Step",
+            "adversarial_lambda": 1,
+            "wavelet": "cmor1.5-1.0",
+        }
+        self.update_params(**recommended_params)
 
 
 if __name__ == "__main__":
