@@ -4,19 +4,6 @@ import warnings
 import json
 from datetime import datetime
 import requests
-
-if __name__ == "__main__":
-    try:
-        # 这里尝试连接hugging face连接不上就换国内镜像源
-        response = requests.get("https://huggingface.co", timeout=5)
-        if response.status_code == 200:
-            print("成功连接到 Hugging Face")
-        else:
-            print(f"连接失败，状态码: {response.status_code}")
-    except requests.exceptions.RequestException:
-        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-        print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
-
 from utils.logger import setlogger
 from utils.train import train_utils
 from utils.fetch_conditions import fetch_all_conditions_from_huggingface
@@ -30,9 +17,15 @@ class Argument:
     def __init__(self):
         # 数据集
         self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
-        self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
-        self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
-        self.transfer_task = [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]]  # 迁移方向
+        self.hugging_face = False  # 是否使用huggingface数据集
+        
+        if self.hugging_face:
+            self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
+        else: 
+            self.local_data_path = "E:\Data"  # 数据集本地路径
+        
+        self.labels = {"Ball": 0, "Inner Race": 1, "Outer Race Centered": 2, "Outer Race Opposite": 3, "Outer Race Orthogonal": 4}  # 标签
+        self.transfer_task = [["CWRU_1024", "CWRU_48k_Drive_End_Bearing_Fault_Data"], ["CWRU_1024", "CWRU_12k_Drive_End_Bearing_Fault_Data"]]  # 迁移方向
 
         # 预处理
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
@@ -45,7 +38,7 @@ class Argument:
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.max_epoch = 2  # 训练最大轮数
+        self.max_epoch = 200  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
 
         # 数据记录
@@ -61,28 +54,30 @@ class Argument:
         self.lr = 1e-3  # 初始学习率
         self.lr_scheduler = "step"  # 学习率调度器 step/exp/stepLR/fix
         self.gamma = 0.1  # 学习率调度器参数
-        self.steps = [150, 250]  # 学习率衰减轮次
+        self.steps = [110, 160]  # 学习率衰减轮次
 
         # 迁移学习参数
-        self.middle_epoch = 5  # 引入目标域数据的起始轮次
+        self.middle_epoch = 80  # 引入目标域数据的起始轮次
 
         # 基于映射
-        self.distance_option = True  # 是否采用基于映射的损失
+        self.distance_option = False  # 是否采用基于映射的损失
         self.distance_loss = "MK-MMD"  # 损失模型 MK-MMD/JMMD/CORAL
         self.distance_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.distance_lambda = 1  # 若调整模式为Cons，指定其具体值
 
         # 基于领域对抗
-        self.adversarial_option = False  # 是否采用领域对抗
+        self.adversarial_option = True  # 是否采用领域对抗
         self.adversarial_loss = "CDA"  # 领域对抗损失
         self.hidden_size = 1024  # 对抗网络的隐藏层维数
         self.grl_option = "Step"  # 梯度反转层权重选择静态or动态更新
         self.grl_lambda = 1  # 梯度静态反转时梯度所乘的系数
         self.adversarial_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
-        self.adversarial_lambda = 1  # 若调整模式为Cons，指定其具体值
+        self.adversarial_lambda = 300  # 若调整模式为Cons，指定其具体值
 
         # 输出可视化
         self.wavelet = "cmor1.5-1.0"  # 小波类型
+        self.confusion_matrix = True  # 是否输出混淆矩阵
+        self.confusion_matrix_phase = "target_val"  # 输出混淆矩阵的阶段
 
     def update_params(self, **kwargs):
         """
@@ -107,7 +102,7 @@ class Argument:
             "bottleneck_num": 256,
             "batch_size": 64,
             "cuda_device": "0",
-            "max_epoch": 2,
+            "max_epoch": 300,
             "num_workers": 0,
             "checkpoint_dir": "./checkpoint",
             "print_step": 50,
@@ -137,7 +132,20 @@ class Argument:
 
 if __name__ == "__main__":
     args = Argument()
+    if args.hugging_face:
+        try:
+            # 这里尝试连接hugging face连接不上就换国内镜像源
+            response = requests.get("https://huggingface.co", timeout=5)
+            if response.status_code == 200:
+                print("成功连接到 Hugging Face")
+            else:
+                print(f"连接失败，状态码: {response.status_code}")
+        except requests.exceptions.RequestException:
+            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+            print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
+    
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device.strip()
+    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"  # 使CUDA操作同步执行，便于调试
     warnings.filterwarnings("ignore")
 
     save_dir = os.path.join(args.checkpoint_dir, args.model_name + "_" + datetime.strftime(datetime.now(), "%m%d-%H%M%S"))

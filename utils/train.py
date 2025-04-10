@@ -7,9 +7,11 @@ from datetime import datetime
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch import optim
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
@@ -40,18 +42,27 @@ class train_utils:
             logging.info(f"using {self.device_count} cpu")
 
         # 加载数据集
-        if self.owned:
-            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
-            self.dataloaders = {}
-            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.owned_data_split(
-                self.data_path, args.batch_size, args.num_workers, self.device
-            )
+        if args.hugging_face:
+            if self.owned:
+                signal_dataset_creator = SignalDatasetCreator(args.data_set, args.transfer_task, len(args.labels))
+                self.dataloaders = {}
+                self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.owned_data_split(
+                    self.data_path, args.batch_size, args.num_workers, self.device
+                )
+            else:
+                signal_dataset_creator = SignalDatasetCreator(args.data_set, args.transfer_task, len(args.labels))
+                self.dataloaders = {}
+                self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
+                    args.batch_size, args.num_workers, self.device
+                )
         else:
-            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.transfer_task, len(args.labels))
             self.dataloaders = {}
-            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
-                args.batch_size, args.num_workers, self.device
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.local_data_split(
+                args.local_data_path, args.batch_size, args.num_workers, self.device
             )
+
+
         # 定义模型
         self.model = getattr(models, args.model_name)()
         if args.bottleneck:
@@ -82,7 +93,7 @@ class train_utils:
                         hidden_size=args.hidden_size,
                         max_iter=self.max_iter,
                         grl_option=args.grl_option,
-                        grl_lambda=args.grl_lambda,
+                        grl_lambda=args.grl_lambda
                     )
                 else:
                     self.AdversarialNet = AdversarialNet(
@@ -90,7 +101,7 @@ class train_utils:
                         hidden_size=args.hidden_size,
                         max_iter=self.max_iter,
                         grl_option=args.grl_option,
-                        grl_lambda=args.grl_lambda,
+                        grl_lambda=args.grl_lambda
                     )
             else:
                 if args.bottleneck_num:
@@ -168,12 +179,18 @@ class train_utils:
         else:
             self.adversarial_loss = None
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss()
 
         # 画图记录
         self.acc = {"source_train": np.array([]), "source_val": np.array([]), "target_val": np.array([])}
-
         self.loss = {"source_train": np.array([]), "source_val": np.array([]), "target_val": np.array([])}
+        self.loss_component = {"classifier_loss": np.array([])}
+
+        if args.distance_option:
+            self.loss_component["distance_loss"] = np.array([])
+        if args.adversarial_option:
+            self.loss_component["adversarial_loss"] = np.array([])
+
 
     def train(self):
         args = self.args
@@ -195,6 +212,10 @@ class train_utils:
         # 熵方法的计数器
         iter_num_entropy = 0
 
+        # 初始化混淆矩阵
+        if args.confusion_matrix:
+            self.cm = None
+        
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
             logging.info(f"{'-' * 5}Epoch {epoch}/{args.max_epoch - 1}{'-' * 5}")
@@ -209,6 +230,9 @@ class train_utils:
                 epoch_start = time.time()
                 epoch_acc = 0
                 epoch_loss = 0.0
+                epoch_classifier_loss = 0.0
+                epoch_distance_loss = 0.0
+                epoch_adversarial_loss = 0.0
                 epoch_length = 0
 
                 # 设置模型为训练/测试模式
@@ -256,11 +280,11 @@ class train_utils:
                         if phase != "source_train" or epoch < args.middle_epoch:
                             # 未引入目标域数据训练，直接计算损失
                             logits = outputs
-                            loss = self.criterion(logits, labels)
+                            loss = self.criterion(logits, labels.type(torch.float32))
                         else:
                             # 若引入了目标域数据训练，要先提取出源域的前向传播结果，再计算源域损失
                             logits = outputs.narrow(0, 0, labels.size(0))
-                            classifier_loss = self.criterion(logits, labels)
+                            classifier_loss = self.criterion(logits, labels.type(torch.float32))
 
                             # 计算基于映射的损失
                             if self.distance_loss is not None:
@@ -358,7 +382,7 @@ class train_utils:
                                 raise Exception("trade_off_distance not implement")
 
                             if args.adversarial_tradeoff == "Cons":
-                                adversarial_lambda = args.lam_adversarial
+                                adversarial_lambda = args.adversarial_lambda
                             elif args.adversarial_tradeoff == "Step":
                                 tmp = -10 * ((epoch - args.middle_epoch) / (args.max_epoch - args.middle_epoch))
                                 adversarial_lambda = 2 / (1 + math.exp(-10 * ((epoch - args.middle_epoch) / (args.max_epoch - args.middle_epoch)))) - 1
@@ -367,13 +391,33 @@ class train_utils:
 
                             loss = classifier_loss + distance_lambda * distance_loss + adversarial_lambda * adversarial_loss
 
+                            classifier_loss_temp = classifier_loss.item() * labels.size(0)
+                            epoch_classifier_loss += classifier_loss_temp
+
+                            distance_loss_temp = distance_loss.item() * labels.size(0) if self.distance_loss is not None else 0
+                            epoch_distance_loss += distance_loss_temp
+
+                            adversarial_loss_temp = adversarial_loss.item() * labels.size(0) if self.adversarial_loss is not None else 0
+                            epoch_adversarial_loss += adversarial_loss_temp
+
                         # 计算每个batch的损失、预测正确个数与长度
                         pred = logits.argmax(dim=1)
-                        correct = torch.eq(pred, labels).float().sum().item()
+                        correct = torch.eq(pred, labels.argmax(dim=1)).float().sum().item()
+
                         loss_temp = loss.item() * labels.size(0)
                         epoch_loss += loss_temp
+                            
                         epoch_acc += correct
                         epoch_length += labels.size(0)
+
+                        if args.confusion_matrix and phase == args.confusion_matrix_phase and epoch == args.max_epoch - 1:
+                            # 计算混淆矩阵
+                            pred = pred.cpu().numpy()
+                            real_labels = labels.argmax(dim=1).cpu().numpy()
+                            if self.cm is not None:
+                                self.cm += confusion_matrix(real_labels, pred, labels=list(range(len(args.labels))))
+                            else:
+                                self.cm = confusion_matrix(real_labels, pred, labels=list(range(len(args.labels))))
 
                         # 计算训练信息
                         if phase == "source_train":
@@ -407,6 +451,10 @@ class train_utils:
 
                 # 记录每个epoch的损失与准确率
                 epoch_loss = epoch_loss / epoch_length
+                epoch_classifier_loss = epoch_classifier_loss / epoch_length
+                epoch_distance_loss = epoch_distance_loss / epoch_length if self.distance_loss is not None else 0
+                epoch_adversarial_loss = epoch_adversarial_loss / epoch_length if self.adversarial_loss is not None else 0
+
                 epoch_acc = epoch_acc / epoch_length
                 logging.info(f"Epoch: {epoch} {phase}-Loss: {epoch_loss:.4f} {phase}-Acc: {epoch_acc:.4f}, Cost {time.time() - epoch_start:.1f} sec")
 
@@ -422,6 +470,15 @@ class train_utils:
 
                 self.acc[phase] = np.append(self.acc[phase], epoch_acc)
                 self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+                if phase == "source_train":
+                    if epoch < args.middle_epoch:
+                        self.loss_component["classifier_loss"] = np.append(self.loss_component["classifier_loss"], epoch_loss)
+                    else:
+                        self.loss_component["classifier_loss"] = np.append(self.loss_component["classifier_loss"], epoch_classifier_loss)
+                    if args.distance_option:  
+                        self.loss_component["distance_loss"] = np.append(self.loss_component["distance_loss"], epoch_distance_loss)
+                    if args.adversarial_option:  
+                        self.loss_component["adversarial_loss"] = np.append(self.loss_component["adversarial_loss"], epoch_adversarial_loss)
 
             # 每个epoch结束后更新学习率
             if self.lr_scheduler is not None:
@@ -430,7 +487,8 @@ class train_utils:
     def plot(self):
         args = self.args
 
-        plt.subplot(1, 2, 1)
+        plt.figure(figsize=(20, 6))
+        plt.subplot(1, 3, 1)
         plt.title("Accuracy")
         plt.xlabel("epoches")
         plt.ylabel("accuracy")
@@ -439,17 +497,41 @@ class train_utils:
         plt.plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
         plt.legend()
 
-        plt.subplot(1, 2, 2)
+        plt.subplot(1, 3, 2)
         plt.title(f"Loss Function: {args.distance_loss}")
         plt.xlabel("epoches")
-        plt.ylabel("accuracy")
+        plt.ylabel("loss")
         plt.plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
         plt.plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
         plt.plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
         plt.legend()
 
+        plt.subplot(1, 3, 3)
+        plt.title("Loss Component")
+        plt.xlabel("epoches")
+        plt.ylabel("loss")  
+        plt.plot(range(args.max_epoch), self.loss_component["classifier_loss"], label="classifier_loss")
+        if args.distance_option:
+            plt.plot(range(args.max_epoch), self.loss_component["distance_loss"], label="distance_loss")
+        if args.adversarial_option:
+            plt.plot(range(args.max_epoch), self.loss_component["adversarial_loss"], label="adversarial_loss")
+        plt.legend()
+
         plt.tight_layout()
+        plt.savefig(os.path.join(self.save_dir, "loss.png"))
         plt.show()
+
+        # 绘制混淆矩阵
+        disp = ConfusionMatrixDisplay(confusion_matrix=self.cm, 
+                                      display_labels=list(args.labels.keys()))
+        disp.plot(cmap="Blues", values_format="d")
+
+        plt.title(f"Confusion Matrix ({args.confusion_matrix_phase})")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.save_dir, "confusion_matrix.png"))
+        plt.show()
+        
 
     def generate_fig(self):
         args = self.args
