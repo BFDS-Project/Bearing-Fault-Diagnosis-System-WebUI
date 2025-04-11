@@ -1,6 +1,11 @@
+import logging
 import os
+import pandas as pd
 import requests
+import torch
+import warnings
 import zipfile
+from datetime import datetime
 
 if __name__ == "__main__":
     try:
@@ -20,17 +25,10 @@ if __name__ == "__main__":
 
 import gradio as gr
 from BFDS_train import Argument
-import torch
-from utils.predict import predict
-import pandas as pd
-
-import logging
-import warnings
-from datetime import datetime
-
-
 from utils.logger import setlogger
+from utils.predict import predict
 from utils.train import train_utils
+
 
 # 初始化 Argument 实例
 args = Argument()

@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 import models
 from dataset.get_dataset import get_user_dataset
-import torch.nn.functional as F
 
 
 def predict(model_state_dict, signal_file, args):

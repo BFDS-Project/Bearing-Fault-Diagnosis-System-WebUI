@@ -18,7 +18,6 @@ if __name__ == "__main__":
     os.environ["HF_DATASETS_CACHE"] = "./cache"
 
 from datasets import get_dataset_config_names, get_dataset_split_names
-import json
 
 
 def fetch_all_conditions_from_huggingface(dataset_name):

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class BasicBlock1D(nn.Module):
     expansion = 1  # 扩展倍数，用于调整输出通道数
 
@@ -32,6 +33,7 @@ class BasicBlock1D(nn.Module):
 
         return out
 
+
 class ResNet1D(nn.Module):
     def __init__(self, block=BasicBlock1D, layers=[2, 2, 2, 2]):
         super(ResNet1D, self).__init__()
@@ -58,8 +60,7 @@ class ResNet1D(nn.Module):
         # 如果需要调整通道数或步幅不为1，则定义下采样层
         if stride != 1 or self.in_channels != out_channels * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv1d(self.in_channels, out_channels * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
+                nn.Conv1d(self.in_channels, out_channels * block.expansion, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm1d(out_channels * block.expansion),
             )
 
@@ -96,19 +97,16 @@ class ResNet1D(nn.Module):
     def output_num(self):
         # 返回输出特征维度
         return self.__in_features
-    
+
+
 def resnet1d18():
     # 构建 ResNet1D-18 模型
     return ResNet1D(layers=[2, 2, 2, 2])
 
-if __name__ == "__main__":
-    # 调试和测试模型
-    model = resnet1d18()  # 输出固定为 256 特征
-    print(model)
 
-    # 创建一个随机输入张量，批量大小为 8，信号长度为 1024
+if __name__ == "__main__":
+    model = resnet1d18()
+    print(model)
     input_tensor = torch.randn(8, 1, 1024)
     output = model(input_tensor)
-
-    # 打印输出形状
     print("Output shape:", output.shape)

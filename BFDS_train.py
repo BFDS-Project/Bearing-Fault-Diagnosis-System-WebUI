@@ -2,8 +2,8 @@ import os
 import logging
 import warnings
 import json
-from datetime import datetime
 import requests
+from datetime import datetime
 
 if __name__ == "__main__":
     try:
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
     if not os.path.exists("./cache"):
-        os.makedirs("./cache")  # 创建缓存目录
+        os.makedirs("./cache")
     os.environ["HF_DATASETS_CACHE"] = "./cache"
 
 from utils.logger import setlogger
@@ -35,14 +35,14 @@ class Argument:
         self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
         self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
         self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
-        self.transfer_task = [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]]  # 迁移方向
-        self.target_domain_labeled = False  # 表示目标域在训练中是否带有标签
+        self.transfer_task = [["CWRURPM", "12kDriveEndrpm1730"], ["CWRURPM", "12kDriveEndrpm1750"]]  # 迁移方向
+        self.target_domain_labeled = True  # 表示目标域在训练中是否带有标签
 
         # 预处理
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
         self.stratified_sampling = True  # 是否分层采样, True/False
         # 模型
-        self.model_name = "ResNet"  # 模型名
+        self.model_name = "CNN"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
         self.bottleneck_num = 256  # bottleneck层的输出维数
 
@@ -118,7 +118,8 @@ class Argument:
             "data_set": "BFDS-Project/Bearing-Fault-Diagnosis-System",
             "conditions": fetch_all_conditions_from_huggingface("BFDS-Project/Bearing-Fault-Diagnosis-System"),
             "labels": {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5},
-            "transfer_task": [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]],
+            "transfer_task": [["CWRURPM", "12kDriveEndrpm1730"], ["CWRURPM", "12kDriveEndrpm1750"]],
+            "target_domain_labeled": False,
             "normalize_type": None,
             "stratified_sampling": True,
             "model_name": "CNN",
@@ -126,7 +127,7 @@ class Argument:
             "bottleneck_num": 256,
             "batch_size": 64,
             "cuda_device": "0",
-            "max_epoch": 2,
+            "max_epoch": 100,
             "num_workers": 0,
             "checkpoint_dir": "./checkpoint",
             "print_step": 50,
@@ -136,8 +137,8 @@ class Argument:
             "lr": 1e-3,
             "lr_scheduler": "step",
             "gamma": 0.1,
-            "steps": [150, 250],
-            "middle_epoch": 0,
+            "steps": [25, 75],
+            "middle_epoch": 50,
             "distance_option": True,
             "distance_loss": "JMMD",
             "distance_tradeoff": "Step",

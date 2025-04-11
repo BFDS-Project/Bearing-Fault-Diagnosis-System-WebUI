@@ -1,7 +1,9 @@
+from typing import Literal, Optional
+
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
-from typing import Optional, Literal
+from torch.utils.data import DataLoader, Dataset, Subset, random_split
+
 from dataset.get_data import get_huggingface_dataset, get_local_dataset, get_user_dataset
 
 
