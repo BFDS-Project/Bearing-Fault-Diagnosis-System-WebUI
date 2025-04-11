@@ -195,6 +195,8 @@ class train_utils:
         # 熵方法的计数器
         iter_num_entropy = 0
 
+        best_source_train_loss = float('inf')  # 初始化最低 source_train_loss
+
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
             logging.info(f"{'-' * 5}Epoch {epoch}/{args.max_epoch - 1}{'-' * 5}")
@@ -205,6 +207,8 @@ class train_utils:
 
             # 每轮分为三个阶段：源域训练、源域测试、目标域测试
             for phase in ["source_train", "source_val", "target_val"]:
+                if phase == "target_val" and not args.target_domain_labeled:  # 跳过 target_val 阶段
+                    continue
                 # Define the temp variable
                 epoch_start = time.time()
                 epoch_acc = 0
@@ -410,18 +414,25 @@ class train_utils:
                 epoch_acc = epoch_acc / epoch_length
                 logging.info(f"Epoch: {epoch} {phase}-Loss: {epoch_loss:.4f} {phase}-Acc: {epoch_acc:.4f}, Cost {time.time() - epoch_start:.1f} sec")
 
-                # 保存模型
-                if phase == "target_val":
-                    # 保存最优模型参数
-                    # 判据：保存middle_epoch后准确率更优或达到最大轮次的epoch中的参数
+                if phase == "source_train" and not args.target_domain_labeled:
+                    # 保存 source_train_loss 最低的模型参数
+                    if epoch_loss < best_source_train_loss:
+                        best_source_train_loss = epoch_loss
+                        logging.info(f"save best source_train model epoch {epoch}, loss {epoch_loss:.4f}")
+                        torch.save(self.model_all.state_dict(), os.path.join(self.save_dir, f"{epoch}-{best_source_train_loss:.4f}-best_source_train_model.bin"))
+                elif phase == "target_val" and args.target_domain_labeled:
+                    # 保存 target_val_acc 最优的模型参数
                     model_state_dic = self.model_all.state_dict()
                     if (epoch_acc > best_acc or epoch == args.max_epoch - 1) and (epoch > args.middle_epoch - 1):
                         best_acc = epoch_acc
                         logging.info(f"save best model epoch {epoch}, acc {epoch_acc:.4f}")
                         torch.save(model_state_dic, os.path.join(self.save_dir, f"{epoch}-{best_acc:.4f}-best_model.bin"))
 
-                self.acc[phase] = np.append(self.acc[phase], epoch_acc)
-                self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+                if phase != "target_val" or args.target_domain_labeled:  # 修改此处
+                    self.acc[phase] = np.append(self.acc[phase], epoch_acc)
+                    self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+                else:
+                    self.loss[phase] = np.append(self.loss[phase], epoch_loss)
 
             # 每个epoch结束后更新学习率
             if self.lr_scheduler is not None:
@@ -436,7 +447,8 @@ class train_utils:
         plt.ylabel("accuracy")
         plt.plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
         plt.plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
-        plt.plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
+        if args.target_domain_labeled:  # 修改此处
+            plt.plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
         plt.legend()
 
         plt.subplot(1, 2, 2)
@@ -445,7 +457,8 @@ class train_utils:
         plt.ylabel("accuracy")
         plt.plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
         plt.plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
-        plt.plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
+        if args.target_domain_labeled:  # 修改此处
+            plt.plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
         plt.legend()
 
         plt.tight_layout()
@@ -461,7 +474,8 @@ class train_utils:
         axs[0].set_ylabel("accuracy")
         axs[0].plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
         axs[0].plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
-        axs[0].plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
+        if args.target_domain_labeled:  # 修改此处
+            axs[0].plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
         axs[0].legend()
 
         axs[1].set_title(f"Loss Function: {args.distance_loss}")
@@ -469,7 +483,8 @@ class train_utils:
         axs[1].set_ylabel("loss")
         axs[1].plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
         axs[1].plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
-        axs[1].plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
+        if args.target_domain_labeled:  # 修改此处
+            axs[1].plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
         axs[1].legend()
 
         plt.tight_layout()
