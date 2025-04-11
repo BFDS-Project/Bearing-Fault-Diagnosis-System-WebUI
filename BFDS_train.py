@@ -1,6 +1,7 @@
 import os
 import logging
 import warnings
+import json
 from datetime import datetime
 import requests
 
@@ -15,6 +16,9 @@ if __name__ == "__main__":
     except requests.exceptions.RequestException:
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
+    if not os.path.exists("./cache"):
+        os.makedirs("./cache")  # 创建缓存目录
+    os.environ["HF_DATASETS_CACHE"] = "./cache"
 
 from utils.logger import setlogger
 from utils.train import train_utils
@@ -31,11 +35,11 @@ class Argument:
         self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
         self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
         self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
-        self.transfer_task = [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]]  # 迁移方向
+        self.transfer_task = [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]]  # 迁移方向
 
         # 预处理
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
-
+        self.stratified_sampling = True  # 是否分层采样, True/False
         # 模型
         self.model_name = "ResNet"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
@@ -63,7 +67,7 @@ class Argument:
         self.steps = [150, 250]  # 学习率衰减轮次
 
         # 迁移学习参数
-        self.middle_epoch = 5  # 引入目标域数据的起始轮次
+        self.middle_epoch = 0  # 引入目标域数据的起始轮次
 
         # 基于映射
         self.distance_option = True  # 是否采用基于映射的损失
@@ -80,9 +84,6 @@ class Argument:
         self.adversarial_tradeoff = "Step"  # 损失的trade_off参数 Cons/Step
         self.adversarial_lambda = 1  # 若调整模式为Cons，指定其具体值
 
-        # 输出可视化
-        self.wavelet = "cmor1.5-1.0"  # 小波类型
-
     def update_params(self, **kwargs):
         """
         使用 **kwargs 动态更新 args 的参数。
@@ -93,14 +94,32 @@ class Argument:
             else:
                 print(f"警告: Parameter '{param_name}' does not exist.")
 
+    def save_params(self, save_path):
+        """
+        保存参数到指定路径(JSON 格式)。
+        """
+        params_to_save = {k: v for k, v in self.__dict__.items() if k[-3:] != "dir"}
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(params_to_save, f, indent=4, ensure_ascii=False)
+        logging.info(f"参数已保存到 {save_path}")
+
+    def load_params(self, load_path):
+        """
+        从指定路径加载参数。
+        """
+        with open(load_path, "r", encoding="utf-8") as f:
+            params = json.load(f)
+            self.update_params(**params)
+
     def set_recommended_params(self):
         # 给用户设定的推荐参数
         recommended_params = {
             "data_set": "BFDS-Project/Bearing-Fault-Diagnosis-System",
             "conditions": fetch_all_conditions_from_huggingface("BFDS-Project/Bearing-Fault-Diagnosis-System"),
             "labels": {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5},
-            "transfer_task": [["CWRU", "CWRU_12k_Drive_End_Bearing_Fault_Data"], ["CWRU", "CWRU_12k_Fan_End_Bearing_Fault_Data"]],
+            "transfer_task": [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]],
             "normalize_type": None,
+            "stratified_sampling": True,
             "model_name": "CNN",
             "bottleneck": True,
             "bottleneck_num": 256,
@@ -129,7 +148,6 @@ class Argument:
             "grl_lambda": 1,
             "adversarial_tradeoff": "Step",
             "adversarial_lambda": 1,
-            "wavelet": "cmor1.5-1.0",
         }
         self.update_params(**recommended_params)
 
@@ -152,6 +170,9 @@ if __name__ == "__main__":
     for k, v in args.__dict__.items():
         if k[-3:] != "dir":
             logging.info(f"{k}: {v}")
+
+    # 保存参数到文件
+    args.save_params(os.path.join(args.save_dir, "args.json"))
 
     # 训练
     trainer = train_utils(args)

@@ -1,3 +1,4 @@
+# 暂时不使用的代码
 import numpy as np
 import pywt
 import matplotlib.pyplot as plt
@@ -101,3 +102,107 @@ if __name__ == "__main__":
 
     # plt.plot(time, x)
     # plt.show()
+
+# ================================================================
+# %%
+import torch
+import torch.nn as nn
+import pandas as pd
+from dataset.get_dataset import SignalDatasetCreator
+from pathlib import Path
+
+data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
+labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
+transfer_task = [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]]  # 迁移方向
+
+
+signal_dataset_creator = SignalDatasetCreator(data_set, labels, transfer_task, stratified_sampling=True)
+dataloaders = {}
+dataloaders["source_train"], dataloaders["source_val"], dataloaders["target_train"], dataloaders["target_val"] = signal_dataset_creator.data_split(
+    64, 0, device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+)
+
+# %%
+import models
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = getattr(models, "ResNet")().to(device)
+bottleneck_layer = nn.Sequential(
+    nn.Linear(model.output_num(), 256),
+    nn.ReLU(inplace=True),
+    nn.Dropout(),
+).to(device)
+classifier_layer = nn.Linear(256, len(labels)).to(device)
+model_all = nn.Sequential(model, bottleneck_layer, classifier_layer).to(device)
+model_all.load_state_dict(torch.load("checkpoint/150_0/149-0.3942-best_model.bin"))  # 加载模型参数
+model_without_head = nn.Sequential(*list(model_all.children())[:-1])
+
+
+# %%
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import ListedColormap
+
+# 定义一个固定的颜色映射
+num_classes = len(set(label for dataloader in dataloaders.values() for _, labels in dataloader for label in labels.numpy()))
+colors = plt.cm.get_cmap("tab10", num_classes)  # 使用 "tab10" 颜色映射
+cmap = ListedColormap(colors.colors)
+
+
+def plot_tsne(dataloader, title, ax):
+    model_all.eval()
+    with torch.no_grad():
+        for i, (inputs, labels) in enumerate(dataloader):
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            outputs = model_without_head(inputs)
+            # Collect all points across all batches
+            if i == 0:
+                all_points = outputs.cpu().numpy()
+                all_labels = labels.cpu().numpy()
+            else:
+                all_points = np.concatenate((all_points, outputs.cpu().numpy()), axis=0)
+                all_labels = np.concatenate((all_labels, labels.cpu().numpy()), axis=0)
+
+        # Apply t-SNE to reduce dimensions to 2D
+        tsne = TSNE(n_components=2, random_state=42)
+        reduced_points = tsne.fit_transform(all_points)
+
+        # Plot the reduced points
+        scatter = ax.scatter(reduced_points[:, 0], reduced_points[:, 1], c=all_labels, cmap=cmap, s=10)
+        ax.set_title(title)
+        ax.set_xlabel("Dimension 1")
+        ax.set_ylabel("Dimension 2")
+        return scatter, reduced_points, all_labels
+
+
+# Create a 2x2 subplot
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# Plot each dataloader
+# sc1,_ = plot_tsne(dataloaders["source_train"], "Source Train", axes[0, 0])
+sc2, reduced_points2, all_labels2 = plot_tsne(dataloaders["source_val"], "Source Val", axes[0, 1])
+# sc3,_ = plot_tsne(dataloaders["target_train"], "Target Train", axes[1, 0])
+# sc4,_ = plot_tsne(dataloaders["target_val"], "Target Val", axes[1, 1])
+
+# Add a colorbar to the figure
+# cbar = fig.colorbar(sc1, ax=axes, orientation="vertical", fraction=0.02, pad=0.04)
+# cbar.set_label("Labels")
+
+# Adjust layout and show the plot
+plt.tight_layout()
+plt.show()
+
+# %%
+reduced_points2, all_labels2
+
+# %%
+import pandas as pd
+
+df = pd.DataFrame(reduced_points2)
+df["label"] = all_labels2  # 将标签添加为新列
+
+# 保存为 CSV 文件
+df.to_csv("checkpoint/reduced_points_with_labels.csv", index=False)

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
-from dataset.dataset import SignalDatasetCreator
+from dataset.get_dataset import SignalDatasetCreator
 from utils.loss import DAN, JAN, CORAL
 
 
@@ -41,13 +41,13 @@ class train_utils:
 
         # 加载数据集
         if self.owned:
-            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task, args.stratified_sampling)
             self.dataloaders = {}
-            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.owned_data_split(
+            self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.user_data_split(
                 self.data_path, args.batch_size, args.num_workers, self.device
             )
         else:
-            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task)
+            signal_dataset_creator = SignalDatasetCreator(args.data_set, args.labels, args.transfer_task, args.stratified_sampling)
             self.dataloaders = {}
             self.dataloaders["source_train"], self.dataloaders["source_val"], self.dataloaders["target_train"], self.dataloaders["target_val"] = signal_dataset_creator.data_split(
                 args.batch_size, args.num_workers, self.device

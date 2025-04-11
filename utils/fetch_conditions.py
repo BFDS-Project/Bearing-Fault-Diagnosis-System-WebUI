@@ -13,6 +13,10 @@ if __name__ == "__main__":
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
 
+    if not os.path.exists("./cache"):
+        os.makedirs("./cache")  # 创建缓存目录
+    os.environ["HF_DATASETS_CACHE"] = "./cache"
+
 from datasets import get_dataset_config_names, get_dataset_split_names
 import json
 
@@ -42,4 +46,4 @@ if __name__ == "__main__":
     print("huggingface上的数据集配置和分割信息:")
     # print(json.dumps(conditions, indent=2))
     # 返回conditions的key用数组存储
-    print(conditions[0][0])
+    print(conditions)

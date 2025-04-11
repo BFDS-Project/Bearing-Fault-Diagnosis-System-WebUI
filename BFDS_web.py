@@ -14,13 +14,15 @@ if __name__ == "__main__":
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
 
+    if not os.path.exists("./cache"):
+        os.makedirs("./cache")
+    os.environ["HF_DATASETS_CACHE"] = "./cache"
 
 import gradio as gr
-import matplotlib
-import matplotlib.pyplot as plt
 from BFDS_train import Argument
 import torch
 from utils.predict import predict
+import pandas as pd
 
 import logging
 import warnings
@@ -29,22 +31,6 @@ from datetime import datetime
 
 from utils.logger import setlogger
 from utils.train import train_utils
-from utils.fetch_conditions import fetch_all_conditions_from_huggingface
-
-dataset_name = "BFDS-Project/Bearing-Fault-Diagnosis-System"
-conditions = fetch_all_conditions_from_huggingface(dataset_name)
-
-# 设置 Matplotlib 的后端为非交互式后端
-matplotlib.use("Agg")
-plt.rcParams.update(
-    {
-        "mathtext.fontset": "stix",
-        "font.size": 14,
-        "font.serif": "STIXGeneral",
-        "font.family": ["Arial", "Microsoft YaHei"],
-        "axes.unicode_minus": False,
-    }
-)
 
 # 初始化 Argument 实例
 args = Argument()
@@ -57,6 +43,7 @@ def transfer_learning(
     source_split,
     target_path,
     normalize_type,
+    stratified_sampling,
     model_name,
     bottleneck,
     bottleneck_num,
@@ -84,11 +71,11 @@ def transfer_learning(
     grl_lambda,
     adversarial_tradeoff,
     adversarial_lambda,
-    wavelet,
 ):
     args_params_dict = {
         "transfer_task": [[source_config, source_split], []],
         "normalize_type": normalize_type,
+        "stratified_sampling": stratified_sampling,
         "model_name": model_name,
         "bottleneck": bottleneck,
         "bottleneck_num": bottleneck_num,
@@ -115,7 +102,6 @@ def transfer_learning(
         "grl_lambda": grl_lambda,
         "adversarial_tradeoff": adversarial_tradeoff,
         "adversarial_lambda": adversarial_lambda,
-        "wavelet": wavelet,
     }
     # 这里更新参数
     if target_path is None:
@@ -134,6 +120,7 @@ def transfer_learning(
     for k, v in args.__dict__.items():
         if k[-3:] != "dir":
             logging.info(f"{k}: {v}")
+    args.save_params(os.path.join(args.save_dir, "args.json"))
     # 训练
     trainer = train_utils(args, owned=True, data_path=target_path)
     trainer.setup()
@@ -143,7 +130,7 @@ def transfer_learning(
     # 压缩 save_dir 文件夹
     zip_filename = f"{trainer.save_dir}.zip"
     with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(trainer.save_dir):
+        for root, _, files in os.walk(trainer.save_dir):
             for file in files:
                 zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), os.path.join(trainer.save_dir, "..")))
 
@@ -151,41 +138,43 @@ def transfer_learning(
 
 
 # 下面是信号推理的函数
-def signal_inference(model_file, signal_file):
+def signal_inference(args_file, model_file, signal_file):
+    if args_file is None or model_file is None or signal_file is None:
+        raise ValueError("请上传参数文件和模型文件和信号数据!")
+    args.load_params(args_file)
     result = []
-    if model_file is None or signal_file is None:
-        raise ValueError("请上传模型文件和信号数据!")
     model_state_dict = torch.load(model_file)
     for signal_file_single in signal_file:
-        result.append(predict(model_state_dict, signal_file_single, args))
-    return result
+        prediction = predict(model_state_dict, signal_file_single, args)
+        result.append({"文件名": signal_file_single, "预测值": prediction})
+    return pd.DataFrame(result)
 
 
 def change_source_split(source_config_radio):
-    source_splits = conditions[source_config_radio]
+    source_splits = args.conditions[source_config_radio]
     return gr.update(choices=source_splits, value=source_splits[0])
 
 
 def change_bottleneck(bottleneck):
-    return gr.update(visible=bottleneck)
+    return gr.update(interactive=bottleneck)
 
 
 def change_opt(opt):
     if opt == "sgd":
-        return gr.update(visible=True), gr.update(visible=True)
+        return gr.update(interactive=True), gr.update(interactive=True)
     elif opt == "adam":
-        return gr.update(visible=False), gr.update(visible=False)
+        return gr.update(interactive=False), gr.update(interactive=False)
 
 
 def change_lr_scheduler(lr_scheduler):
     if lr_scheduler == "step":
-        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)
+        return gr.update(interactive=True), gr.update(interactive=True), gr.update(interactive=True)
     elif lr_scheduler == "exp":
-        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)
+        return gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True)
     elif lr_scheduler == "stepLR":
-        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)
+        return gr.update(interactive=True), gr.update(interactive=True), gr.update(interactive=True)
     elif lr_scheduler == "fix":
-        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)
+        return gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False)
 
 
 def change_steps_start(steps_start, steps_end):
@@ -214,29 +203,29 @@ def change_middle_epoch(max_epoch, middle_epoch):
 
 def change_distance_option(distance_option, distance_tradeoff):
     if distance_option:
-        return gr.update(value=False), gr.update(visible=distance_option), gr.update(visible=distance_option), gr.update(visible=(distance_option and distance_tradeoff == "Cons"))
+        return gr.update(value=False), gr.update(interactive=distance_option), gr.update(interactive=distance_option), gr.update(interactive=(distance_option and distance_tradeoff == "Cons"))
     else:
-        return gr.update(value=False), gr.update(visible=distance_option), gr.update(visible=distance_option), gr.update(visible=(distance_option and distance_tradeoff == "Cons"))
+        return gr.update(value=False), gr.update(interactive=distance_option), gr.update(interactive=distance_option), gr.update(interactive=(distance_option and distance_tradeoff == "Cons"))
 
 
 def change_adversarial_option(adversarial_option, adversarial_tradeoff):
     return (
         gr.update(value=not adversarial_option),
-        gr.update(visible=adversarial_option),
-        gr.update(visible=adversarial_option),
-        gr.update(visible=adversarial_option),
-        gr.update(visible=adversarial_option),
-        gr.update(visible=adversarial_option),
-        gr.update(visible=(adversarial_option and adversarial_tradeoff == "Cons")),
+        gr.update(interactive=adversarial_option),
+        gr.update(interactive=adversarial_option),
+        gr.update(interactive=adversarial_option),
+        gr.update(interactive=adversarial_option),
+        gr.update(interactive=adversarial_option),
+        gr.update(interactive=(adversarial_option and adversarial_tradeoff == "Cons")),
     )
 
 
 def change_distance_tradeoff(distance_option, distance_tradeoff):
-    return gr.update(visible=(distance_option and distance_tradeoff == "Cons"))
+    return gr.update(interactive=(distance_option and distance_tradeoff == "Cons"))
 
 
 def change_adversarial_tradeoff(adversarial_option, adversarial_tradeoff):
-    return (gr.update(visible=(adversarial_option and adversarial_tradeoff == "Cons")),)
+    return (gr.update(interactive=(adversarial_option and adversarial_tradeoff == "Cons")),)
 
 
 with open("docs/BFDS_font.html", "r", encoding="utf-8") as f:
@@ -251,40 +240,48 @@ with gr.Blocks(title="BFDS WebUI") as app:
     """)
     with gr.Tab("模型训练"):
         gr.Markdown("在此模块中，您可以选择不同的迁移学习方法进行模型训练。")
-        with gr.Row():
+        with gr.Row(equal_height=True):
             with gr.Column():
                 source_config_radio = gr.Radio(
                     label="选择源域数据集名称",
-                    choices=list(conditions.keys()),
+                    choices=list(args.conditions.keys()),
                     value=args.transfer_task[0][0],
                 )
                 source_split_radio = gr.Radio(
                     label="选择源域数据集工况",
-                    choices=conditions[args.transfer_task[0][0]],
+                    choices=args.conditions[args.transfer_task[0][0]],
                     value=args.transfer_task[0][1],
-                )
-                target_file = gr.File(label="目标域数据集", file_count="single", file_types=[".csv"])
-                normalize_type_radio = gr.Radio(
-                    label="选择归一化方式",
-                    choices=["mean-std", "min-max", None],
-                    value=args.normalize_type,
                 )
                 model_name_radio = gr.Radio(
                     label="选择模型名称",
-                    choices=["CNN"],
+                    choices=["CNN", "ResNet"],
                     value=args.model_name,
                 )
-                bottleneck_checkbox = gr.Checkbox(
-                    label="是否使用瓶颈层",
-                    value=args.bottleneck,
-                )
-                bottleneck_num_slider = gr.Slider(1, 1024, label="瓶颈层神经元个数", step=1, value=args.bottleneck_num, visible=args.bottleneck)
+            with gr.Column():
+                target_file = gr.File(label="目标域数据集", file_count="single", file_types=[".csv"])
+        with gr.Column():
+            normalize_type_radio = gr.Radio(
+                label="选择归一化方式",
+                choices=["mean-std", "min-max", None],
+                value=args.normalize_type,
+            )
+            cuda_device_radio = gr.Radio(
+                label="选择GPU设备",
+                choices=["0"],
+                value=args.cuda_device,
+            )
+            stratified_sampling_checkbox = gr.Checkbox(
+                label="是否启用分层抽样",
+                value=args.stratified_sampling,  # 默认值为 True
+            )
+            bottleneck_checkbox = gr.Checkbox(
+                label="是否使用瓶颈层",
+                value=args.bottleneck,
+            )
+            bottleneck_num_slider = gr.Slider(1, 1024, label="瓶颈层神经元个数", step=1, value=args.bottleneck_num, interactive=args.bottleneck)
+        with gr.Row(equal_height=True):
+            with gr.Column():
                 batch_size_slider = gr.Slider(1, 258, label="batch_size", step=1, value=args.batch_size)
-                cuda_device_radio = gr.Radio(
-                    label="选择GPU设备",
-                    choices=["0"],
-                    value=args.cuda_device,
-                )
                 max_epoch_slider = gr.Slider(args.middle_epoch + 1, 100, label="max_epoch", step=1, value=args.max_epoch)
                 num_workers_slider = gr.Slider(1, 16, label="num_workers", step=1, value=args.num_workers)
                 opt_radio = gr.Radio(
@@ -294,55 +291,56 @@ with gr.Blocks(title="BFDS WebUI") as app:
                 )
                 momentum_slider = gr.Slider(0, 1, label="momentum", step=0.01, value=args.momentum)
                 weight_decay_slider = gr.Slider(1e-5, 1e-1, label="weight_decay", step=1e-5, value=args.weight_decay)
-                lr_slider = gr.Slider(1e-5, 1e-2, label="学习率", step=1e-5, value=args.lr)
                 lr_scheduler_radio = gr.Radio(
                     label="学习率调度器",
                     choices=["step", "exp", "stepLR", "fix"],
                     value=args.lr_scheduler,
                 )
-                gamma_slider = gr.Slider(1e-5, 1e-2, label="gamma", step=1e-5, value=args.gamma, visible=args.lr_scheduler != "fix")
-                steps_start_slider = gr.Slider(1, args.steps[1] - 1, label="steps 第一个值", step=1, value=args.steps[0], visible=(args.lr_scheduler == "step" or args.lr_scheduler == "stepLR"))
-                steps_end_slider = gr.Slider(args.steps[0] + 1, 1000, label="steps 第二个值", step=1, value=args.steps[1], visible=(args.lr_scheduler == "step" or args.lr_scheduler == "stepLR"))
-                middle_epoch_slider = gr.Slider(0, args.max_epoch - 1, label="middle_epoch", step=1, value=args.middle_epoch)
-                wavelet_radio = gr.Radio(
-                    label="选择波形变换",
-                    choices=["cmor1.5-1.0"],
-                    value=args.wavelet,
-                )
+                lr_slider = gr.Slider(1e-5, 1e-2, label="学习率", step=1e-5, value=args.lr)
+                gamma_slider = gr.Slider(1e-5, 1e-2, label="gamma", step=1e-5, value=args.gamma, interactive=args.lr_scheduler != "fix")
+                steps_start_slider = gr.Slider(1, args.steps[1] - 1, label="steps 第一个值", step=1, value=args.steps[0], interactive=(args.lr_scheduler == "step" or args.lr_scheduler == "stepLR"))
+                steps_end_slider = gr.Slider(args.steps[0] + 1, 1000, label="steps 第二个值", step=1, value=args.steps[1], interactive=(args.lr_scheduler == "step" or args.lr_scheduler == "stepLR"))
             with gr.Column():
-                #  这两个true和false不能一起出现
+                middle_epoch_slider = gr.Slider(0, args.max_epoch - 1, label="middle_epoch", step=1, value=args.middle_epoch)
                 distance_option_checkbox = gr.Checkbox(
                     label="是否使用距离损失",
                     value=args.distance_option,
                 )
-                distance_loss_radio = gr.Radio(label="距离损失函数", choices=["MK-MMD", "JMMD", "CORAL"], value=args.distance_loss, visible=args.distance_option)
-                distance_tradeoff_radio = gr.Radio(label="距离损失权重", choices=["Cons", "Step"], value=args.distance_tradeoff, visible=args.distance_option)
-                distance_lambda_slider = gr.Slider(1, 2, label="距离损失权重", step=1e-5, value=args.distance_lambda, visible=(args.distance_option and args.distance_tradeoff == "Cons"))
+                distance_loss_radio = gr.Radio(label="距离损失函数", choices=["MK-MMD", "JMMD", "CORAL"], value=args.distance_loss, interactive=args.distance_option)
+                distance_tradeoff_radio = gr.Radio(label="距离损失权重", choices=["Cons", "Step"], value=args.distance_tradeoff, interactive=args.distance_option)
+                distance_lambda_slider = gr.Slider(1, 2, label="距离损失权重", step=1e-5, value=args.distance_lambda, interactive=(args.distance_option and args.distance_tradeoff == "Cons"))
                 adversarial_option_checkbox = gr.Checkbox(
                     label="是否使用对抗损失",
                     value=args.adversarial_option,
                 )
-                adversarial_loss_radio = gr.Radio(label="对抗损失函数", choices=["DA", "CDA", "CDA+E"], value=args.adversarial_loss, visible=args.adversarial_option)
-                hidden_size_slider = gr.Slider(1, 1024, label="对抗层神经元个数", step=1, value=args.hidden_size, visible=args.adversarial_option)
-                grl_option_radio = gr.Radio(label="是否使用梯度反转层", choices=["Step"], value=args.grl_option, visible=args.adversarial_option)
-                grl_lambda_slider = gr.Slider(1, 2, label="梯度反转层系数", step=1e-5, value=args.grl_lambda, visible=args.adversarial_option)
-                adversarial_tradeoff_radio = gr.Radio(label="对抗损失权重", choices=["Cons", "Step"], value=args.adversarial_tradeoff, visible=args.adversarial_option)
-                adversarial_lambda_slider = gr.Slider(1, 2, label="对抗损失权重", step=1e-5, value=args.adversarial_lambda, visible=(args.adversarial_option and args.adversarial_tradeoff == "Cons"))
-
+                adversarial_loss_radio = gr.Radio(label="对抗损失函数", choices=["DA", "CDA", "CDA+E"], value=args.adversarial_loss, interactive=args.adversarial_option)
+                hidden_size_slider = gr.Slider(1, 1024, label="对抗层神经元个数", step=1, value=args.hidden_size, interactive=args.adversarial_option)
+                grl_option_radio = gr.Radio(label="是否使用梯度反转层", choices=["Step"], value=args.grl_option, interactive=args.adversarial_option)
+                grl_lambda_slider = gr.Slider(1, 2, label="梯度反转层系数", step=1e-5, value=args.grl_lambda, interactive=args.adversarial_option)
+                adversarial_tradeoff_radio = gr.Radio(label="对抗损失权重", choices=["Cons", "Step"], value=args.adversarial_tradeoff, interactive=args.adversarial_option)
+                adversarial_lambda_slider = gr.Slider(
+                    1, 2, label="对抗损失权重", step=1e-5, value=args.adversarial_lambda, interactive=(args.adversarial_option and args.adversarial_tradeoff == "Cons")
+                )
         transfer_learning_button = gr.Button("开始训练")
         with gr.Row():
             with gr.Column():
                 download_output = gr.File(label="下载训练结果压缩包", interactive=False)
             with gr.Column():
                 plot_component = gr.Plot(label="训练结果图表")
-
     with gr.Tab("信号推理"):
         model_file = gr.File(label="模型文件", file_count="single", file_types=[".bin", ".pth", ".pt"])
         gr.Markdown("在此模块中，您可以上传信号数据进行批量推理。")
-        signal_file_multiple = gr.File(label="上传信号数据", file_count="multiple", file_types=[".csv"])
+        signal_args_file = gr.File(label="参数文件", file_count="single", file_types=[".json"])
+        signal_file_multiple = gr.File(label="上传信号数据", file_count="multiple", file_types=[".csv", ".xlsx", ".xls", ".txt", "wav", "mp3", "flac"])
         signal_inference_button = gr.Button("开始批量推理")
-        signal_inference_output = gr.Textbox(label="批量推理结果", lines=8)
-
+        signal_inference_Dataframe = gr.Dataframe(
+            label="批量推理结果",
+            headers=["文件名", "预测值"],
+            datatype=["str", "list"],
+            row_count=8,
+            wrap=True,
+            interactive=False,
+        )
     # 下面是所有函数绑定
     transfer_learning_button.click(
         transfer_learning,
@@ -351,6 +349,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
             source_split_radio,
             target_file,
             normalize_type_radio,
+            stratified_sampling_checkbox,
             model_name_radio,
             bottleneck_checkbox,
             bottleneck_num_slider,
@@ -378,7 +377,6 @@ with gr.Blocks(title="BFDS WebUI") as app:
             grl_lambda_slider,
             adversarial_tradeoff_radio,
             adversarial_lambda_slider,
-            wavelet_radio,
         ],
         outputs=[plot_component, download_output],
     )
@@ -400,7 +398,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
     )
     distance_tradeoff_radio.change(change_distance_tradeoff, inputs=[distance_option_checkbox, distance_tradeoff_radio], outputs=[distance_lambda_slider])
     adversarial_tradeoff_radio.change(change_adversarial_tradeoff, inputs=[adversarial_option_checkbox, adversarial_tradeoff_radio], outputs=[adversarial_lambda_slider])
-    signal_inference_button.click(signal_inference, inputs=[model_file, signal_file_multiple], outputs=signal_inference_output)
+    signal_inference_button.click(signal_inference, inputs=[signal_args_file, model_file, signal_file_multiple], outputs=signal_inference_Dataframe)
 
 app.queue()
 app.launch(favicon_path="docs/favicon.ico", show_error=True)
