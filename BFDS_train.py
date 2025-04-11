@@ -36,6 +36,7 @@ class Argument:
         self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
         self.labels = {"Normal Baseline Data": 0, "Ball": 1, "Inner Race": 2, "Outer Race Centered": 3, "Outer Race Opposite": 4, "Outer Race Orthogonal": 5}  # 标签
         self.transfer_task = [["CWRU224", "12kDriveEnd"], ["CWRU224", "12kFanEnd"]]  # 迁移方向
+        self.target_domain_labeled = False  # 表示目标域在训练中是否带有标签
 
         # 预处理
         self.normalize_type = None  # 归一化方式, mean-std/min-max/None
@@ -48,7 +49,7 @@ class Argument:
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.max_epoch = 2  # 训练最大轮数
+        self.max_epoch = 5  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
 
         # 数据记录
