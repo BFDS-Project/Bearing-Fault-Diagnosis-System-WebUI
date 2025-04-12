@@ -65,7 +65,7 @@ def xlsx_to_signal(signal_file):
     return signal
 
 
-def get_user_dataset(data_path, target_length=224):
+def get_user_dataset(data_path, target_length=1024):
     mime_type, _ = mimetypes.guess_type(data_path)
     supported_types = {
         "text/csv": "CSV 文件",

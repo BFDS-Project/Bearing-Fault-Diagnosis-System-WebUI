@@ -195,11 +195,11 @@ class train_utils:
         # 熵方法的计数器
         iter_num_entropy = 0
 
-        best_source_train_loss = float('inf')  # 初始化最低 source_train_loss
+        best_source_train_loss = float("inf")  # 初始化最低 source_train_loss
 
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
-            logging.info(f"{'-' * 5}Epoch {epoch}/{args.max_epoch - 1}{'-' * 5}")
+            logging.info(f"{'-' * 5}Epoch {epoch + 1}/{args.max_epoch - 1}{'-' * 5}")
             if self.lr_scheduler is not None:
                 logging.info(f"current lr: {self.lr_scheduler.get_lr()}")
             else:
@@ -418,14 +418,14 @@ class train_utils:
                     # 保存 source_train_loss 最低的模型参数
                     if epoch_loss < best_source_train_loss:
                         best_source_train_loss = epoch_loss
-                        logging.info(f"save best source_train model epoch {epoch}, loss {epoch_loss:.4f}")
+                        logging.info(f"save best source_train model epoch {epoch + 1}, loss {epoch_loss:.4f}")
                         torch.save(self.model_all.state_dict(), os.path.join(self.save_dir, f"{epoch}-{best_source_train_loss:.4f}-best_source_train_model.bin"))
                 elif phase == "target_val" and args.target_domain_labeled:
                     # 保存 target_val_acc 最优的模型参数
                     model_state_dic = self.model_all.state_dict()
                     if (epoch_acc > best_acc or epoch == args.max_epoch - 1) and (epoch > args.middle_epoch - 1):
                         best_acc = epoch_acc
-                        logging.info(f"save best model epoch {epoch}, acc {epoch_acc:.4f}")
+                        logging.info(f"save best model epoch {epoch + 1}, acc {epoch_acc:.4f}")
                         torch.save(model_state_dic, os.path.join(self.save_dir, f"{epoch}-{best_acc:.4f}-best_model.bin"))
 
                 if phase != "target_val" or args.target_domain_labeled:  # 修改此处
