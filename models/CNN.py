@@ -51,6 +51,6 @@ class CNN(nn.Module):
 
 if __name__ == "__main__":
     model = CNN()
-    input = torch.randn(1, 1, 224)
+    input = torch.randn(1, 1, 1024)
     out = model(input)
     print(out.shape)

@@ -1,6 +1,9 @@
 /checkpoint
 /cache
+.gitignore
+.git
 /docker
+README.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

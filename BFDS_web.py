@@ -1,11 +1,12 @@
 import logging
 import os
-import pandas as pd
-import requests
-import torch
 import warnings
 import zipfile
 from datetime import datetime
+
+import requests
+import torch
+import pandas as pd
 
 if __name__ == "__main__":
     try:
@@ -18,10 +19,9 @@ if __name__ == "__main__":
     except requests.exceptions.RequestException:
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
-
-    if not os.path.exists("./cache"):
-        os.makedirs("./cache")
-    os.environ["HF_DATASETS_CACHE"] = "./cache"
+    if not os.path.exists("cache"):
+        os.makedirs("cache")
+    os.environ["HUGGINGFACE_HUB_CACHE"] = "cache"
 
 import gradio as gr
 from BFDS_train import Argument
@@ -175,28 +175,20 @@ def change_lr_scheduler(lr_scheduler):
         return gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False)
 
 
-def change_steps_start(steps_start, steps_end):
-    if steps_start >= steps_end:
-        steps_start = steps_end - 1
-    return gr.update(value=steps_start, maximum=steps_end - 1)
+def change_steps_start(steps_start):
+    return gr.update(minimum=steps_start + 1)
 
 
-def change_steps_end(steps_start, steps_end):
-    if steps_end <= steps_start:
-        steps_end = steps_start + 1
-    return gr.update(value=steps_end, minimum=steps_start + 1)
+def change_steps_end(steps_end):
+    return gr.update(maximum=steps_end - 1)
 
 
-def change_max_epoch(max_epoch, middle_epoch):
-    if middle_epoch >= max_epoch:
-        middle_epoch = max_epoch - 1
-    return gr.update(value=max_epoch, maximum=max_epoch - 1)
+def change_max_epoch(max_epoch):
+    return gr.update(maximum=max_epoch - 1)
 
 
-def change_middle_epoch(max_epoch, middle_epoch):
-    if middle_epoch >= max_epoch:
-        middle_epoch = max_epoch - 1
-    return gr.update(value=middle_epoch, maximum=max_epoch - 1)
+def change_middle_epoch(middle_epoch):
+    return gr.update(minimum=middle_epoch + 1)
 
 
 def change_distance_option(distance_option, distance_tradeoff):
@@ -270,7 +262,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
             )
             stratified_sampling_checkbox = gr.Checkbox(
                 label="是否启用分层抽样",
-                value=args.stratified_sampling,  # 默认值为 True
+                value=args.stratified_sampling,
             )
             bottleneck_checkbox = gr.Checkbox(
                 label="是否使用瓶颈层",
@@ -280,7 +272,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
         with gr.Row(equal_height=True):
             with gr.Column():
                 batch_size_slider = gr.Slider(1, 258, label="batch_size", step=1, value=args.batch_size)
-                max_epoch_slider = gr.Slider(args.middle_epoch + 1, 100, label="max_epoch", step=1, value=args.max_epoch)
+                max_epoch_slider = gr.Slider(args.middle_epoch + 1, 1000, label="max_epoch", step=1, value=args.max_epoch)
                 num_workers_slider = gr.Slider(1, 16, label="num_workers", step=1, value=args.num_workers)
                 opt_radio = gr.Radio(
                     label="选择优化器",
@@ -382,10 +374,10 @@ with gr.Blocks(title="BFDS WebUI") as app:
     opt_radio.change(change_opt, inputs=[opt_radio], outputs=[momentum_slider, weight_decay_slider])
     bottleneck_checkbox.change(change_bottleneck, inputs=[bottleneck_checkbox], outputs=[bottleneck_num_slider])
     lr_scheduler_radio.change(change_lr_scheduler, inputs=[lr_scheduler_radio], outputs=[steps_start_slider, steps_end_slider, gamma_slider])
-    steps_start_slider.change(change_steps_start, inputs=[steps_start_slider, steps_end_slider], outputs=[steps_start_slider])
-    steps_end_slider.change(change_steps_end, inputs=[steps_start_slider, steps_end_slider], outputs=[steps_end_slider])
-    max_epoch_slider.change(change_middle_epoch, inputs=[max_epoch_slider, middle_epoch_slider], outputs=[middle_epoch_slider])
-    middle_epoch_slider.change(change_middle_epoch, inputs=[max_epoch_slider, middle_epoch_slider], outputs=[middle_epoch_slider])
+    steps_start_slider.change(change_steps_start, inputs=[steps_start_slider], outputs=[steps_end_slider])
+    steps_end_slider.change(change_steps_end, inputs=[steps_end_slider], outputs=[steps_start_slider])
+    max_epoch_slider.change(change_max_epoch, inputs=[max_epoch_slider], outputs=[middle_epoch_slider])
+    middle_epoch_slider.change(change_middle_epoch, inputs=[middle_epoch_slider], outputs=[max_epoch_slider])
     distance_option_checkbox.change(
         change_distance_option, inputs=[distance_option_checkbox, distance_tradeoff_radio], outputs=[adversarial_option_checkbox, distance_loss_radio, distance_tradeoff_radio, distance_lambda_slider]
     )
@@ -398,5 +390,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
     adversarial_tradeoff_radio.change(change_adversarial_tradeoff, inputs=[adversarial_option_checkbox, adversarial_tradeoff_radio], outputs=[adversarial_lambda_slider])
     signal_inference_button.click(signal_inference, inputs=[signal_args_file, model_file, signal_file_multiple], outputs=signal_inference_Dataframe)
 
+print("本地访问: http://127.0.0.1:7860")
+print("Docker访问: http://127.0.0.1:7860")
 app.queue()
-app.launch(favicon_path="docs/favicon.ico", show_error=True)
+app.launch(server_name="0.0.0.0", server_port=7860, favicon_path="docs/favicon.ico", show_error=True)

@@ -16,9 +16,9 @@ if __name__ == "__main__":
     except requests.exceptions.RequestException:
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
-    if not os.path.exists("./cache"):
-        os.makedirs("./cache")
-    os.environ["HF_DATASETS_CACHE"] = "./cache"
+    if not os.path.exists("cache"):
+        os.makedirs("cache")
+    os.environ["HUGGINGFACE_HUB_CACHE"] = "cache"
 
 from utils.logger import setlogger
 from utils.train import train_utils
@@ -122,7 +122,7 @@ class Argument:
             "target_domain_labeled": False,
             "normalize_type": None,
             "stratified_sampling": True,
-            "model_name": "CNN",
+            "model_name": "ResNet",
             "bottleneck": True,
             "bottleneck_num": 256,
             "batch_size": 64,
