@@ -9,7 +9,7 @@
 
 ## 快速部署
 
-### 使用 CPU 版本
+### 使用CPU版本
 
 1. **拉取镜像**：
 
@@ -42,7 +42,7 @@
 
 ---
 
-### 使用 GPU 版本
+### 使用GPU版本
 
 1. **拉取镜像**：
 
@@ -77,7 +77,7 @@
 
 ## 自行部署镜像
 
-### 使用 CPU 版本
+### 使用CPU版本
 
 1. **构建镜像**：
 
@@ -110,7 +110,7 @@
 
 ---
 
-### 使用 GPU 版本
+### 使用GPU版本
 
 1. **构建镜像**：
 
@@ -154,7 +154,7 @@
 
 2. **创建虚拟环境**：
 
-   - **CPU 版本**：
+   - **CPU版本**：
 
      ```bash
      conda create -n BFDSWeb-cpu python=3.13
@@ -162,7 +162,7 @@
      pip install -r requirements-cpu.txt
      ```
 
-   - **GPU 版本**：
+   - **GPU版本**：
 
      ```bash
      conda create -n BFDSWeb-gpu python=3.13
