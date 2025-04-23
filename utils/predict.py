@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,7 +29,7 @@ def predict(model_state_dict, signal_file, args):
         predictions = output.mean(dim=0).cpu()
         predictions = predictions.numpy()
         predictions = predictions / predictions.sum()
-        predictions = [round(value, 3) for value in predictions]
+        predictions = [float(Decimal(float(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)) for value in predictions]
         diff = 1.0 - sum(predictions)
         predictions[predictions.index(max(predictions))] += diff
     return predictions
