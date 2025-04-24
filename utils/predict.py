@@ -8,10 +8,11 @@ import models
 from dataset.get_dataset import get_user_dataset
 
 
-def predict(model_state_dict, signal_file, args):
+def predict(model_file, signal_file, args):
     signal = get_user_dataset(signal_file)
     signal = torch.tensor(signal.to_numpy(), dtype=torch.float32).unsqueeze(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_state_dict = torch.load(model_file, map_location=device)
     model = getattr(models, args.model_name)().to(device)
     bottleneck_layer = nn.Sequential(
         nn.Linear(model.output_num(), args.bottleneck_num),

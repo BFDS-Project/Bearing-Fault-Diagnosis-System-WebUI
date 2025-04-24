@@ -158,7 +158,7 @@
 
      ```bash
      conda create -n BFDSWeb-cpu python=3.13
-     conda activate BFDSWeb-gpu
+     conda activate BFDSWeb-cpu
      pip install -r requirements-cpu.txt
      ```
 

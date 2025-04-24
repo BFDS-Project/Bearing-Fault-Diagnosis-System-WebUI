@@ -51,7 +51,7 @@ def audio_to_signal(audio_file, sr=None):
 
 
 def csv_to_signal(signal_file):
-    signal = pd.read_csv(signal_file).to_numpy().flatten()
+    signal = pd.read_csv(signal_file, header=None).to_numpy().flatten()
     return signal
 
 
@@ -61,7 +61,7 @@ def txt_to_signal(signal_file):
 
 
 def xlsx_to_signal(signal_file):
-    signal = pd.read_excel(signal_file).to_numpy().flatten()
+    signal = pd.read_excel(signal_file, header=None).to_numpy().flatten()
     return signal
 
 
@@ -86,6 +86,7 @@ def get_user_dataset(data_path, target_length=1024):
     else:
         supported_list = ", ".join([f"{key} ({value})" for key, value in supported_types.items()])
         raise ValueError(f"不支持的文件类型: {mime_type}。支持的文件类型包括: {supported_list}")
+    signal = np.nan_to_num(signal.astype(float), nan=0.0)
     padding_size = 0 if signal.size % target_length == 0 else target_length - (signal.size % target_length)
     signal = np.pad(signal, (0, padding_size), mode="constant", constant_values=0)
     reshaped_data = signal.reshape(-1, target_length)
@@ -96,7 +97,7 @@ def get_user_dataset(data_path, target_length=1024):
 
 
 if __name__ == "__main__":
-    data_path = r"C:\Users\Administrator\Desktop\demo.csv"
+    data_path = r"checkpoint\ac.xlsx"
     df = get_user_dataset(data_path)
     print(df.head())
     print(df.shape)

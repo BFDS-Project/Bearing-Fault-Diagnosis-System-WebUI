@@ -141,9 +141,8 @@ def signal_inference(args_file, model_file, signal_file):
         raise ValueError("请上传参数文件和模型文件和信号数据!")
     args.load_params(args_file)
     result = []
-    model_state_dict = torch.load(model_file)
     for signal_file_single in signal_file:
-        prediction = predict(model_state_dict, signal_file_single, args)
+        prediction = predict(model_file, signal_file_single, args)
         result.append({"文件名": signal_file_single, "预测值": prediction})
     return pd.DataFrame(result)
 
