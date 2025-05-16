@@ -21,6 +21,7 @@ if __name__ == "__main__":
     if not os.path.exists("cache"):
         os.makedirs("cache")
     os.environ["HUGGINGFACE_HUB_CACHE"] = "cache"
+    os.environ["NO_PROXY"] = "localhost,127.0.0.1"
 
 import gradio as gr
 from BFDS_train import Argument
@@ -222,7 +223,6 @@ def change_adversarial_tradeoff(adversarial_option, adversarial_tradeoff):
 with open("docs/BFDS_font.html", "r", encoding="utf-8") as f:
     BFDS_font_html = f.read()
 
-# gradio BFDS_web.py --demo-name app
 with gr.Blocks(title="BFDS WebUI") as app:
     gr.HTML(BFDS_font_html)
     gr.Markdown("""
