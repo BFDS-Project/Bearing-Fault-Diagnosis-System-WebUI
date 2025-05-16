@@ -21,7 +21,6 @@ def get_huggingface_dataset(data_set, subset, split):
         >>> df = get_huggingface_dataset("imdb", "plain_text", "train")
         >>> print(df.head())
     """
-
     ds = load_dataset(data_set, subset)
     return ds[split].to_pandas()
 
@@ -97,7 +96,9 @@ def get_user_dataset(data_path, target_length=1024):
 
 
 if __name__ == "__main__":
-    data_path = r"checkpoint\ac.xlsx"
-    df = get_user_dataset(data_path)
+    # data_path = r"checkpoint\ac.xlsx"
+    # df = get_user_dataset(data_path)
+    # print(df.head())
+    # print(df.shape)
+    df = get_huggingface_dataset("BFDS-Project/Bearing-Fault-Diagnosis-System", "CWRURPM", "12kDriveEndrpm1730")
     print(df.head())
-    print(df.shape)

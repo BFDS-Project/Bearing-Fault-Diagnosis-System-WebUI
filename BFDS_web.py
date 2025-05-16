@@ -1,11 +1,8 @@
-import logging
 import os
+import requests
 import warnings
 import zipfile
 from datetime import datetime
-
-import requests
-import pandas as pd
 
 if __name__ == "__main__":
     try:
@@ -18,17 +15,20 @@ if __name__ == "__main__":
     except requests.exceptions.RequestException:
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
+    if not os.path.exists("cache"):
+        os.makedirs("cache")
+    os.environ["HUGGINGFACE_HUB_CACHE"] = "cache"
 
-    if not os.path.exists("./cache"):
-        os.makedirs("./cache")  # 创建缓存目录
-    os.environ["HF_HOME"] = "./cache"
-    os.environ["NO_PROXY"] = "localhost,127.0.0.1"
+
+import pandas as pd
+
 
 import gradio as gr
 from BFDS_train import Argument
 from utils.logger import setlogger
 from utils.predict import predict
 from utils.train import train_utils
+import logging
 
 
 # 初始化 Argument 实例

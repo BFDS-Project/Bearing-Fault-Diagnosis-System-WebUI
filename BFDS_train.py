@@ -16,10 +16,10 @@ if __name__ == "__main__":
     except requests.exceptions.RequestException:
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         print(f"无法连接到 Hugging Face:换源到{os.environ['HF_ENDPOINT']}")
+    if not os.path.exists("cache"):
+        os.makedirs("cache")
+    os.environ["HUGGINGFACE_HUB_CACHE"] = "cache"
 
-    if not os.path.exists("./cache"):
-        os.makedirs("./cache")  # 创建缓存目录
-    os.environ["HF_HOME"] = "./cache"
 
 from utils.logger import setlogger
 from utils.train import train_utils
