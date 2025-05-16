@@ -15,7 +15,7 @@ if __name__ == "__main__":
 
     if not os.path.exists("./cache"):
         os.makedirs("./cache")  # 创建缓存目录
-    os.environ["HF_DATASETS_CACHE"] = "./cache"
+    os.environ["HF_HOME"] = "./cache"
 
 from datasets import get_dataset_config_names, get_dataset_split_names
 
