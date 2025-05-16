@@ -1,33 +1,59 @@
-name: Sync with Hugging Face Space
+name: Publish Docker Image to GitHub Container Registry
 
 on:
   release:
-    types: [published]
+    types: [published]  # 只有在发布时触发
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    steps:
-      - name: 检查代码
-        uses: actions/checkout@v3
 
-      - name: 同步到 Hugging Face Space
-        uses: alex-bene/huggingface-space-sync-action@v0.1
-        with:
-          github_repo_id: ${{ github.repository }}
-          github_branch: main
-          yaml_header_path: docs/hf_space_metadata.yml
-          huggingface_repo_id: BFDS-Project/Bearing-Fault-Diagnosis-System-Web
-          hf_username: BFDS-Project
-          hf_token: ${{ secrets.HF_TOKEN }}
-
-  cleanup:
-    needs: deploy
-    if: failure()
-    runs-on: ubuntu-latest
     steps:
-      - name: 删除 GitHub Release
-        uses: liudonghua123/delete-release-action@v1
+      # 获取仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # 获取最新的 Tag
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          # 获取最新的 Tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "cpu0.0")
+          echo "Latest tag: $latest_tag"
+          # 提取版本号并递增
+          version=$(echo $latest_tag | grep -oE '[0-9]+\.[0-9]+' || echo "0.0")
+          major=$(echo $version | cut -d. -f1)
+          minor=$(echo $version | cut -d. -f2)
+          new_minor=$((minor + 1))
+          new_version="${major}.${new_minor}"
+          echo "New version: $new_version"
+          echo "new_version=$new_version" >> $GITHUB_ENV
+
+      # 登录 GitHub 容器注册表
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
         with:
-          release_name: ${{ github.event.release.tag_name }}
-          suppress_errors: true
+          username: ${{ github.actor }}  # GitHub 用户名
+          password: ${{ secrets.GITHUB_TOKEN }}  # GitHub 令牌
+
+      # 构建并推送 CPU 版本的 Docker 镜像
+      - name: Build and push CPU Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile.cpu  # 指定 CPU 版本的 Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:cpu-${{ env.new_version }}
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:cpu-latest
+
+      # 构建并推送 GPU 版本的 Docker 镜像
+      - name: Build and push GPU Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile.gpu  # 指定 GPU 版本的 Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:gpu-${{ env.new_version }}
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:gpu-latest

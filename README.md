@@ -14,7 +14,7 @@
 1. **拉取镜像**：
 
    ```bash
-   docker pull ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:cpu1.0
+   docker pull ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:cpu-latest
    ```
 
 2. **创建目录**：
@@ -47,7 +47,7 @@
 1. **拉取镜像**：
 
    ```bash
-   docker pull ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:gpu1.0
+   docker pull ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:gpu-latest
    ```
 
 2. **创建目录**：
