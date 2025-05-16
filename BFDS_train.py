@@ -34,7 +34,7 @@ class Argument:
         # 数据集
         self.data_set = "BFDS-Project/Bearing-Fault-Diagnosis-System"  # 数据集huggingface地址
         self.conditions = fetch_all_conditions_from_huggingface(self.data_set)  # 数据集的配置和分割信息如果想要知道明确的信息来确定迁移方向请自行运行fetch_conditions.py
-        self.labels = ({"Ball": 0, "Inner Race": 1, "Outer Race Centered": 2, "Outer Race Opposite": 3, "Outer Race Orthogonal": 4},)
+        self.labels = {"Ball": 0, "Inner Race": 1, "Outer Race Centered": 2, "Outer Race Opposite": 3, "Outer Race Orthogonal": 4}
         # 标签
         self.transfer_task = [["CWRURPM", "12kDriveEndrpm1730"], ["CWRURPM", "12kDriveEndrpm1750"]]  # 迁移方向
         self.target_domain_labeled = True  # 表示目标域在训练中是否带有标签
@@ -45,7 +45,7 @@ class Argument:
         # 模型
         self.model_name = "CNN"  # 模型名
         self.bottleneck = True  # 是否使用bottleneck层
-        self.bottleneck_num = 256  # bottleneck层的输出维数 
+        self.bottleneck_num = 256  # bottleneck层的输出维数
 
         # 训练
         self.batch_size = 64  # 批次大小

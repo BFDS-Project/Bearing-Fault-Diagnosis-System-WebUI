@@ -5,7 +5,6 @@ import zipfile
 from datetime import datetime
 
 import requests
-import torch
 import pandas as pd
 
 if __name__ == "__main__":
@@ -143,7 +142,10 @@ def signal_inference(args_file, model_file, signal_file):
     result = []
     for signal_file_single in signal_file:
         prediction = predict(model_file, signal_file_single, args)
-        result.append({"文件名": signal_file_single, "预测值": prediction})
+        labels = list(args.labels.keys())
+        prediction_dict = dict(zip(labels, prediction))
+        prediction_dict = {"文件名": os.path.basename(signal_file_single), **prediction_dict}
+        result.append(prediction_dict)
     return pd.DataFrame(result)
 
 
