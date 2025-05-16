@@ -1,34 +1,53 @@
-name: Publish Docker Image to GitHub Container Registry
+name: auto docker
 
 on:
   release:
-    types: [published]  # 只有在发布时触发
+    types: [published]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 获取仓库代码
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # 设置 Docker 版本
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "cpu0.0")
+          echo "Latest tag: $latest_tag"
+          version=$(echo $latest_tag | grep -oE '[0-9]+\.[0-9]+' || echo "0.0")
+          major=$(echo $version | cut -d. -f1)
+          minor=$(echo $version | cut -d. -f2)
+          new_minor=$((minor + 1))
+          new_version="${major}.${new_minor}"
+          echo "New version: $new_version"
+          echo "new_version=$new_version" >> $GITHUB_ENV
 
-      # 登录 GitHub 容器注册表
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
-          username: ${{ github.actor }}  # GitHub 用户名
-          password: ${{ secrets.GITHUB_TOKEN }}  # GitHub 令牌
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
 
-      # 构建 Docker 镜像并推送到 GitHub 容器注册表
-      - name: Build and push Docker image
+      - name: Build and push CPU Docker image
         uses: docker/build-push-action@v2
         with:
           context: .
-          file: Dockerfile  # 如果您的 Dockerfile 有不同的路径，请更改此路径
+          file: Dockerfile.cpu
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:${{ github.ref_name }}  # 使用版本号作为标签
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:cpu-${{ env.new_version }}
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:cpu-latest
+
+      - name: Build and push GPU Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile.gpu
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:gpu-${{ env.new_version }}
+            ghcr.io/${{ github.repository_owner }}/bearing-fault-diagnosis-system-webui:gpu-latest
