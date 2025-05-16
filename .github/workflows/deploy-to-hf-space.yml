@@ -1,4 +1,4 @@
-name: Publish Docker Image to GitHub Container Registry
+name: deploy to huggingface space
 
 on:
   release:
