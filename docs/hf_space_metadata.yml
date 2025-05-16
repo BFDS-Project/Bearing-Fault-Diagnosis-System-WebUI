@@ -1,0 +1,10 @@
+title: Bearing Fault Diagnosis System Web
+emoji: 🛠️
+colorFrom: gray
+colorTo: gray
+sdk: gradio
+sdk_version: 5.25.2
+app_file: BFDS_web.py
+pinned: false
+license: mit
+python_version: 3.13.2

@@ -3,7 +3,7 @@
   <h1>Bearing-Fault-Diagnosis-System-WebUI</h1>
 </div>
 
-![web-demo](/docs/web-demo.png)
+![web-demo](docs/web-demo.png)
 
 ---
 

@@ -1,0 +1,33 @@
+name: Sync with Hugging Face Space
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查代码
+        uses: actions/checkout@v3
+
+      - name: 同步到 Hugging Face Space
+        uses: alex-bene/huggingface-space-sync-action@v0.1
+        with:
+          github_repo_id: ${{ github.repository }}
+          github_branch: main
+          yaml_header_path: docs/hf_space_metadata.yml
+          huggingface_repo_id: BFDS-Project/Bearing-Fault-Diagnosis-System-Web
+          hf_username: BFDS-Project
+          hf_token: ${{ secrets.HF_TOKEN }}
+
+  cleanup:
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除 GitHub Release
+        uses: liudonghua123/delete-release-action@v1
+        with:
+          release_name: ${{ github.event.release.tag_name }}
+          suppress_errors: true
