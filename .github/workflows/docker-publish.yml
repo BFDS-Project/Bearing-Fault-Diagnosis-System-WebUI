@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read      # 允许 actions/checkout 读取仓库
+  packages: write     # 允许向 GHCR 推送镜像
+
 jobs:
   build:
     runs-on: ubuntu-latest
