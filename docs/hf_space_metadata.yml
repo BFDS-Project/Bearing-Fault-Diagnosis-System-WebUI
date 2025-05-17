@@ -8,3 +8,4 @@ app_file: BFDS_web.py
 pinned: false
 license: mit
 python_version: 3.13.2
+requirements: requirements-cpu.txt
