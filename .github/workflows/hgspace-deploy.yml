@@ -21,4 +21,3 @@ jobs:
           huggingface_repo_id: BFDS-Project/Bearing-Fault-Diagnosis-System-Web
           hf_username: Str0keOOOO
           hf_token: ${{ secrets.HF_TOKEN }}
-          force: true
