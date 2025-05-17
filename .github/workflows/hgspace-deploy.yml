@@ -1,8 +1,13 @@
 name: Deploy to Hugging Face Spaces
 
+# on:
+  # release:
+    # types: [published]
+
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -15,6 +20,12 @@ jobs:
         run: |
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           git config --global user.name "${{ github.actor }}"
+
+      - name: 确保代码已提交到 main 分支
+        run: |
+          git checkout -b main
+          git add .
+          git commit -m "Initial commit"
 
       - name: 添加 Hugging Face 远程仓库
         run: |
