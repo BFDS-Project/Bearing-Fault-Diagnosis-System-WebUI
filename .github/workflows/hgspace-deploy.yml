@@ -16,11 +16,9 @@ jobs:
 
       - name: 同步到 Hugging Face Space
         run: |
-          # 确保 YAML 元数据部分格式正确
-          echo '---' > README_sp.md
-          cat docs/hf_space_metadata.yml >> README_sp.md
-          echo '---' >> README_sp.md
-          cat README.md >> README_sp.md
+          echo '---'|cat - docs/hf_space_metadata.yml > README_sp.md
+          echo -e '---\n'|cat - README.md >> README_sp.md
+          rm README.md
           mv README_sp.md README.md
           git add README.md
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
