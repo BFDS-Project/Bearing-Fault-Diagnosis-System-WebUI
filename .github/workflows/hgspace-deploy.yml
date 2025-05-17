@@ -16,11 +16,12 @@ jobs:
 
       - name: 同步到 Hugging Face Space
         run: |
+          mv requirements-cpu.txt requirements.txt
           echo '---'|cat - docs/hf_space_metadata.yml > README_sp.md
           echo -e '---\n'|cat - README.md >> README_sp.md
           rm README.md
           mv README_sp.md README.md
-          git add README.md
+          git add README.md requirements.txt
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git commit -m "Added yaml header on README for HF Space" || echo "No changes to commit"
