@@ -1,3 +1,10 @@
+name: Sync with Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -5,26 +12,14 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v3
 
-      - name: 配置 Git 用户
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-
-      - name: 添加 Hugging Face Space 远程仓库
-        run: |
-          git remote add hf https://{{ secrets.HF_TOKEN }}@huggingface.co/BFDS-Project/Bearing-Fault-Diagnosis-System-Web
-          git fetch hf main
-
-      - name: 合并 Hugging Face Space 最新内容
-        run: |
-          git merge hf/main --allow-unrelated-histories -m "Merge Hugging Face Space changes"
-
       - name: 同步到 Hugging Face Space
-        uses: alex-bene/huggingface-space-sync-action@v0.1
-        with:
-          github_repo_id: ${{ github.repository }}
-          github_branch: main
-          yaml_header_path: docs/hf_space_metadata.yml
-          huggingface_repo_id: BFDS-Project/Bearing-Fault-Diagnosis-System-Web
-          hf_username: Str0keOOOO
-          hf_token: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo '---'|cat - docs/hf_space_metadata.yml > README_sp.md
+          echo -e '---\n'|cat - README.md >> README_sp.md
+          rm README.md
+          mv README_sp.md README.md
+          git add README.md
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git commit -m "Added yaml header on README for HF Space" || echo "No changes to commit"
+          git push --force https://Str0keOOOO:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/BFDS-Project/Bearing-Fault-Diagnosis-System-Web main
