@@ -1,4 +1,4 @@
-name: Deploy to Hugging Face Spaces
+name: Sync with Hugging Face Space
 
 on:
   push:
@@ -12,30 +12,12 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v3
 
-      - name: 设置 Git 用户信息
-        run: |
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          git config --global user.name "${{ github.actor }}"
-
-      - name: 确保代码已提交到 main 分支
-        run: |
-          if [ $(git branch --list main) ]; then
-            git checkout main
-          else
-            git checkout -b main
-          fi
-          git add .
-          git commit -m "Initial commit" || echo "No changes to commit"
-
-      - name: 添加 Hugging Face 远程仓库
-        run: |
-          git remote add hf https://huggingface.co/spaces/BFDS-Project/Bearing-Fault-Diagnosis-System-Web
-
-      - name: 推送代码到 Hugging Face Spaces
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          set -e
-          git config --global credential.helper store
-          echo "https://BFDS-Project:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
-          git push --force hf main
+      - name: 同步到 Hugging Face Space
+        uses: alex-bene/huggingface-space-sync-action@v0.1
+        with:
+          github_repo_id: ${{ github.repository }}
+          github_branch: main
+          yaml_header_path: docs/hf_space_metadata.yml
+          huggingface_repo_id: BFDS-Project/Bearing-Fault-Diagnosis-System-Web
+          hf_username: Str0keOOOO
+          hf_token: ${{ secrets.HF_TOKEN }}

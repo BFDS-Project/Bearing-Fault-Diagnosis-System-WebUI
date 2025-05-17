@@ -45,7 +45,7 @@ jobs:
           file: Dockerfile.cpu
           push: true
           tags: |
-            ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:cpu-${{ env.new_version }}
+            ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:cpu${{ env.new_version }}
             ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:cpu-latest
 
       - name: Build and push GPU Docker image
@@ -55,5 +55,5 @@ jobs:
           file: Dockerfile.gpu
           push: true
           tags: |
-            ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:gpu-${{ env.new_version }}
+            ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:gpu${{ env.new_version }}
             ghcr.io/bfds-project/bearing-fault-diagnosis-system-webui:gpu-latest
