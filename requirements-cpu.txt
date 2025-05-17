@@ -86,6 +86,9 @@ starlette==0.46.1
 sympy==1.13.1
 threadpoolctl==3.6.0
 tomlkit==0.13.2
+torch==2.6.0
+torchaudio==2.6.0
+torchvision==0.21.0
 tqdm==4.67.1
 typer==0.15.2
 typing-inspection==0.4.0
