@@ -1,9 +1,5 @@
 name: Deploy to Hugging Face Spaces
 
-# on:
-  # release:
-    # types: [published]
-
 on:
   push:
     branches:
@@ -23,9 +19,13 @@ jobs:
 
       - name: 确保代码已提交到 main 分支
         run: |
-          git checkout -b main
+          if [ $(git branch --list main) ]; then
+            git checkout main
+          else
+            git checkout -b main
+          fi
           git add .
-          git commit -m "Initial commit"
+          git commit -m "Initial commit" || echo "No changes to commit"
 
       - name: 添加 Hugging Face 远程仓库
         run: |
