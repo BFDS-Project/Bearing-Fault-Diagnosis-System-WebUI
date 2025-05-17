@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # 完整克隆仓库历史记录
 
       - name: 同步到 Hugging Face Space
         run: |
