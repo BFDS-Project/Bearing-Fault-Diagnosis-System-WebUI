@@ -5,7 +5,6 @@ colorTo: gray
 sdk: gradio
 sdk_version: 5.25.2
 app_file: BFDS_web.py
-requirements: requirements-cpu.txt
 pinned: false
 license: mit
 python_version: 3.13.2
