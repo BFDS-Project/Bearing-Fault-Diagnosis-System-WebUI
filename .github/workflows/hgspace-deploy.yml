@@ -1,0 +1,30 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置 Git 用户信息
+        run: |
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${{ github.actor }}"
+
+      - name: 添加 Hugging Face 远程仓库
+        run: |
+          git remote add hf https://huggingface.co/spaces/BFDS-Project/Bearing-Fault-Diagnosis-System-Web
+
+      - name: 推送代码到 Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -e
+          git config --global credential.helper store
+          echo "https://BFDS-Project:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+          git push --force hf main
