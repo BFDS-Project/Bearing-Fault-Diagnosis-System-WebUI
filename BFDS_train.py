@@ -4,6 +4,7 @@ import warnings
 import json
 import requests
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     try:
@@ -51,7 +52,7 @@ class Argument:
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.max_epoch = 5  # 训练最大轮数
+        self.max_epoch = 1  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
 
         # 数据记录
@@ -70,7 +71,7 @@ class Argument:
         self.steps = [150, 250]  # 学习率衰减轮次
 
         # 迁移学习参数
-        self.middle_epoch = 0  # 引入目标域数据的起始轮次
+        self.middle_epoch = 1  # 引入目标域数据的起始轮次
 
         # 基于映射
         self.distance_option = True  # 是否采用基于映射的损失
@@ -182,4 +183,9 @@ if __name__ == "__main__":
     trainer = train_utils(args)
     trainer.setup()
     trainer.train()
-    trainer.plot()
+    # 保存图片
+    tsne_fig = trainer.generate_tsne_fig()
+    tsne_fig.savefig(os.path.join(args.save_dir, "tsne.png"))
+    eval_fig = trainer.generate_eval_fig()
+    eval_fig.savefig(os.path.join(args.save_dir, "eval.png"))
+    plt.show()

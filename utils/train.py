@@ -15,6 +15,8 @@ import models
 from models.AdversarialNet import AdversarialNet, calc_coeff, grl_hook, Entropy
 from dataset.get_dataset import SignalDatasetCreator
 from utils.loss import DAN, JAN, CORAL
+from sklearn.manifold import TSNE
+import matplotlib.colors as mcolors
 
 
 class train_utils:
@@ -438,33 +440,7 @@ class train_utils:
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
-    def plot(self):
-        args = self.args
-
-        plt.subplot(1, 2, 1)
-        plt.title("Accuracy")
-        plt.xlabel("epoches")
-        plt.ylabel("accuracy")
-        plt.plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
-        plt.plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
-        if args.target_domain_labeled:  # 修改此处
-            plt.plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        plt.title(f"Loss Function: {args.distance_loss}")
-        plt.xlabel("epoches")
-        plt.ylabel("accuracy")
-        plt.plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
-        plt.plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
-        if args.target_domain_labeled:  # 修改此处
-            plt.plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
-        plt.legend()
-
-        plt.tight_layout()
-        plt.show()
-
-    def generate_fig(self):
+    def generate_eval_fig(self):
         args = self.args
 
         fig, axs = plt.subplots(1, 2, figsize=(14, 6))
@@ -474,7 +450,7 @@ class train_utils:
         axs[0].set_ylabel("accuracy")
         axs[0].plot(range(args.max_epoch), self.acc["source_train"], label="source_train")
         axs[0].plot(range(args.max_epoch), self.acc["source_val"], label="source_val")
-        if args.target_domain_labeled:  # 修改此处
+        if args.target_domain_labeled:
             axs[0].plot(range(args.max_epoch), self.acc["target_val"], label="target_val")
         axs[0].legend()
 
@@ -483,9 +459,56 @@ class train_utils:
         axs[1].set_ylabel("loss")
         axs[1].plot(range(args.max_epoch), self.loss["source_train"], label="source_train")
         axs[1].plot(range(args.max_epoch), self.loss["source_val"], label="source_val")
-        if args.target_domain_labeled:  # 修改此处
+        if args.target_domain_labeled:
             axs[1].plot(range(args.max_epoch), self.loss["target_val"], label="target_val")
         axs[1].legend()
 
+        plt.tight_layout()
+        return fig
+
+    def generate_tsne_fig(self):
+        args = self.args
+        self.model.eval()
+        if args.bottleneck:
+            self.bottleneck_layer.eval()
+        self.classifier_layer.eval()
+
+        features_list = []
+        labels_list = []
+
+        with torch.no_grad():
+            for inputs, _ in self.dataloaders["target_val"]:
+                inputs = inputs.to(self.device)
+                features = self.model(inputs)
+                if args.bottleneck:
+                    features = self.bottleneck_layer(features)
+                outputs = self.classifier_layer(features)
+                outputs = outputs.argmax(dim=1)
+                features_list.append(features.cpu().numpy())
+                labels_list.append(outputs.cpu().numpy())
+
+        features = np.concatenate(features_list, axis=0)
+        target_val_labels = np.concatenate(labels_list, axis=0)
+        np.savetxt(os.path.join(self.save_dir, "target_val_labels.csv"), target_val_labels, delimiter=",", fmt="%d")
+        tsne = TSNE(n_components=2, random_state=42)
+        tsne_results = tsne.fit_transform(features)
+
+        # 离散色图和边界
+        fig = plt.figure(figsize=(10, 6))
+        cmap = plt.get_cmap("tab10", len(args.labels))
+        norm = mcolors.BoundaryNorm(boundaries=np.arange(-0.5, len(args.labels) + 0.5, 1), ncolors=len(args.labels))
+        scatter = plt.scatter(
+            tsne_results[:, 0],
+            tsne_results[:, 1],
+            c=target_val_labels,
+            cmap=cmap,
+            norm=norm,
+            alpha=0.7,
+        )
+        cbar = plt.colorbar(scatter, ticks=range(len(args.labels)), label="Class")
+        cbar.ax.set_yticklabels(list(args.labels.keys()))
+
+        plt.xlabel("t-SNE1")
+        plt.ylabel("t-SNE2")
         plt.tight_layout()
         return fig

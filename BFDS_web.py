@@ -124,8 +124,11 @@ def transfer_learning(
     trainer = train_utils(args, owned=True, data_path=target_path)
     trainer.setup()
     trainer.train()
-    fig = trainer.generate_fig()
-
+    # 保存图片
+    tsne_fig = trainer.generate_tsne_fig()
+    tsne_fig.savefig(os.path.join(args.save_dir, "tsne.png"))
+    eval_fig = trainer.generate_eval_fig()
+    eval_fig.savefig(os.path.join(args.save_dir, "eval.png"))
     # 压缩 save_dir 文件夹
     zip_filename = f"{trainer.save_dir}.zip"
     with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -133,7 +136,7 @@ def transfer_learning(
             for file in files:
                 zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), os.path.join(trainer.save_dir, "..")))
 
-    return fig, zip_filename
+    return eval_fig, zip_filename, tsne_fig
 
 
 # 下面是信号推理的函数
@@ -187,11 +190,11 @@ def change_steps_end(steps_end):
 
 
 def change_max_epoch(max_epoch):
-    return gr.update(maximum=max_epoch - 1)
+    return gr.update(maximum=max_epoch)
 
 
 def change_middle_epoch(middle_epoch):
-    return gr.update(minimum=middle_epoch + 1)
+    return gr.update(minimum=middle_epoch)
 
 
 def change_distance_option(distance_option, distance_tradeoff):
@@ -316,9 +319,10 @@ with gr.Blocks(title="BFDS WebUI") as app:
         transfer_learning_button = gr.Button("开始训练")
         with gr.Row():
             with gr.Column():
+                plot_component = gr.Plot(label="训练结果图表")
                 download_output = gr.File(label="下载训练结果压缩包", interactive=False)
             with gr.Column():
-                plot_component = gr.Plot(label="训练结果图表")
+                plot_tsne = gr.Plot(label="t-SNE二维聚类可视化图表")
     with gr.Tab("信号推理"):
         model_file = gr.File(label="模型文件", file_count="single", file_types=[".bin", ".pth", ".pt"])
         gr.Markdown("在此模块中，您可以上传信号数据进行批量推理。")
@@ -370,7 +374,7 @@ with gr.Blocks(title="BFDS WebUI") as app:
             adversarial_tradeoff_radio,
             adversarial_lambda_slider,
         ],
-        outputs=[plot_component, download_output],
+        outputs=[plot_component, download_output, plot_tsne],
     )
     source_config_radio.change(change_source_split, inputs=[source_config_radio], outputs=[source_split_radio])
     opt_radio.change(change_opt, inputs=[opt_radio], outputs=[momentum_slider, weight_decay_slider])
