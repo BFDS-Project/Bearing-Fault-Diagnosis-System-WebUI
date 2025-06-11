@@ -183,7 +183,6 @@ class train_utils:
         batch_acc = 0
         batch_count = 0
         batch_loss = 0.0
-        best_acc = 0.0
         current_sample_count = 0
 
         batch_step = 0
@@ -197,7 +196,8 @@ class train_utils:
         # 熵方法的计数器
         iter_num_entropy = 0
 
-        best_source_train_loss = float("inf")  # 初始化最低 source_train_loss
+        best_target_val_acc = 0.0
+        best_source_val_loss = float("inf")
 
         for epoch in range(args.max_epoch):
             # 记录训练轮次与学习率
@@ -416,25 +416,31 @@ class train_utils:
                 epoch_acc = epoch_acc / epoch_length
                 logging.info(f"Epoch: {epoch} {phase}-Loss: {epoch_loss:.4f} {phase}-Acc: {epoch_acc:.4f}, Cost {time.time() - epoch_start:.1f} sec")
 
-                if phase == "source_train" and not args.target_domain_labeled:
-                    # 保存 source_train_loss 最低的模型参数
-                    if epoch_loss < best_source_train_loss:
-                        best_source_train_loss = epoch_loss
-                        logging.info(f"save best source_train model epoch {epoch + 1}, loss {epoch_loss:.4f}")
-                        torch.save(self.model_all.state_dict(), os.path.join(self.save_dir, f"{epoch}-{best_source_train_loss:.4f}-best_source_train_model.bin"))
-                elif phase == "target_val" and args.target_domain_labeled:
-                    # 保存 target_val_acc 最优的模型参数
-                    model_state_dic = self.model_all.state_dict()
-                    if (epoch_acc > best_acc or epoch == args.max_epoch) and (epoch > args.middle_epoch - 1):
-                        best_acc = epoch_acc
-                        logging.info(f"save best model epoch {epoch + 1}, acc {epoch_acc:.4f}")
-                        torch.save(model_state_dic, os.path.join(self.save_dir, f"{epoch}-{best_acc:.4f}-best_model.bin"))
+                if phase == "source_val":
+                    if epoch_loss < best_source_val_loss:
+                        best_source_val_loss = epoch_loss
+                        logging.info(f"save best source_val model epoch {epoch + 1}, loss {epoch_loss:.4f}")
+                        torch.save(self.model_all.state_dict(), os.path.join(self.save_dir, f"{epoch}-{best_source_val_loss:.4f}-best_source_val_model.bin"))
 
-                if phase != "target_val" or args.target_domain_labeled:  # 修改此处
-                    self.acc[phase] = np.append(self.acc[phase], epoch_acc)
-                    self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+                elif phase == "target_val":
+                    if args.target_domain_labeled:
+                        model_state_dic = self.model_all.state_dict()
+                        if (epoch_acc > best_target_val_acc or epoch == args.max_epoch) and (epoch > args.middle_epoch - 1):
+                            best_target_val_acc = epoch_acc
+                            logging.info(f"save best target_val model epoch {epoch + 1}, acc {epoch_acc:.4f}")
+                            torch.save(model_state_dic, os.path.join(self.save_dir, f"{epoch}-{best_target_val_acc:.4f}-best_target_val_model.bin"))
+                    else:
+                        if epoch_loss < best_source_val_loss:
+                            best_source_val_loss = epoch_loss
+                            logging.info(f"save best source_val model (no target labels) epoch {epoch + 1}, loss {epoch_loss:.4f}")
+                            torch.save(self.model_all.state_dict(), os.path.join(self.save_dir, f"{epoch}-{best_source_val_loss:.4f}-best_source_val_model_no_target.bin"))
+                            # 记录每个阶段的损失与准确率
+                if phase == "target_val" and not args.target_domain_labeled:
+                    self.acc[phase] = np.append(self.acc[phase], np.nan)
                 else:
-                    self.loss[phase] = np.append(self.loss[phase], epoch_loss)
+                    self.acc[phase] = np.append(self.acc[phase], epoch_acc)
+
+                self.loss[phase] = np.append(self.loss[phase], epoch_loss)
 
             # 每个epoch结束后更新学习率
             if self.lr_scheduler is not None:

@@ -91,7 +91,7 @@ standard-aifc==3.13.0
 standard-chunk==3.13.0
 standard-sunau==3.13.0
 starlette==0.46.1
-sympy==1.13.1
+sympy==1.13.3
 threadpoolctl==3.6.0
 tomlkit==0.13.2
 tqdm==4.67.1

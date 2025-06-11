@@ -52,7 +52,7 @@ class Argument:
         # 训练
         self.batch_size = 64  # 批次大小
         self.cuda_device = "0"  # 训练设备
-        self.max_epoch = 1  # 训练最大轮数
+        self.max_epoch = 3  # 训练最大轮数
         self.num_workers = 0  # 训练设备数
 
         # 数据记录
